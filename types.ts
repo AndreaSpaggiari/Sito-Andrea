@@ -73,11 +73,22 @@ export interface HandballPlayer {
 }
 
 export interface PlayerStats {
-  nome: string;
-  partite: number;
-  goal: number;
+  id?: string;
+  player_id: string;
+  presenze: number;
   ammonizioni: number;
-  esclusioni: number;
+  esclusioni_2m: number;
+  rosse: number;
+  blu: number;
+  goal: number;
+  tiri_totali: number;
+  rigori_segnati: number;
+  rigori_totali: number;
+  parate: number;
+  tiri_subiti: number;
+  assist: number;
+  // Relazioni
+  p_giocatori?: HandballPlayer;
 }
 
 // Tipi Produzione (Invariati)
