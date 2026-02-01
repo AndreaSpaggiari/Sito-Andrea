@@ -64,8 +64,11 @@ export interface HandballStanding {
 export interface HandballPlayer {
   id: string;
   nome: string;
-  numero: number;
-  ruolo: string;
+  cognome: string;
+  data_di_nascita?: string;
+  categoria: string;
+  numero_di_maglia: number;
+  ruoli: string;
   foto_url?: string;
 }
 
