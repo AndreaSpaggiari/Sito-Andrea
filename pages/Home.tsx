@@ -9,7 +9,8 @@ interface PendingRequest {
   id: string;
   sezione: string;
   stato: string;
-  profiles: {
+  user_id: string;
+  profiles?: {
     username: string;
     email: string;
   };
@@ -29,17 +30,20 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
     if (profile?.role !== 'ADMIN') return;
     setLoadingRequests(true);
     try {
+      // Query più robusta senza alias complessi
       const { data, error } = await supabase
         .from('l_permessi')
         .select(`
           id,
           sezione,
           stato,
+          user_id,
           profiles:user_id (username, email)
         `)
         .eq('stato', 'RICHIESTO');
       
-      if (data) setPendingRequests(data as any);
+      if (error) throw error;
+      if (data) setPendingRequests(data as any[]);
     } catch (e) {
       console.error("Errore recupero richieste:", e);
     } finally {
@@ -48,8 +52,26 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   }, [profile]);
 
   useEffect(() => {
+    if (profile?.role !== 'ADMIN') return;
+
     fetchRequests();
-  }, [fetchRequests]);
+
+    // Configurazione Real-time: ascolta nuovi permessi inseriti o aggiornati
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'l_permessi' },
+        () => {
+          fetchRequests(); // Ricarica la lista quando cambia qualcosa
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile, fetchRequests]);
 
   const handleUpdatePermission = async (id: string, newState: 'AUTORIZZATO' | 'NEGATO') => {
     try {
@@ -60,9 +82,11 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
       
       if (!error) {
         setPendingRequests(prev => prev.filter(req => req.id !== id));
+      } else {
+        throw error;
       }
     } catch (e) {
-      alert("Errore durante l'aggiornamento");
+      alert("Errore durante l'aggiornamento del permesso");
     }
   };
 
@@ -118,37 +142,44 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
       {profile?.role === 'ADMIN' && (
         <div className="w-full max-w-6xl space-y-6 animate-in fade-in duration-1000">
           <div className="flex items-center justify-between px-4">
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-              <ShieldCheck className="text-blue-600" /> Gestione Richieste Accesso
-            </h3>
+            <div className="flex flex-col">
+              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <ShieldCheck className="text-blue-600" /> Richieste in Sospeso
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Aggiornamento in tempo reale attivo</p>
+            </div>
             <button 
               onClick={fetchRequests} 
               className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-              title="Aggiorna richieste"
+              title="Aggiorna manualmente"
             >
               <RefreshCw size={20} className={loadingRequests ? 'animate-spin' : ''} />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pendingRequests.length > 0 ? (
               pendingRequests.map((req) => (
-                <div key={req.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-lg hover:border-blue-100 transition-all group animate-in slide-in-from-bottom-2">
+                <div key={req.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-lg hover:border-blue-200 transition-all group animate-in slide-in-from-bottom-4">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
                       <Users size={24} />
                     </div>
                     <span className="text-[10px] font-black px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full uppercase tracking-widest">
-                      Richiesto
+                      In Attesa
                     </span>
                   </div>
                   
                   <div className="mb-6">
-                    <p className="text-sm font-black text-slate-900 uppercase truncate">{req.profiles?.username || 'Senza Nome'}</p>
-                    <p className="text-[10px] text-slate-400 font-bold mb-3">{req.profiles?.email}</p>
+                    <p className="text-sm font-black text-slate-900 uppercase truncate">
+                      {req.profiles?.username || 'Utente Senza Nome'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-bold mb-3 truncate">{req.profiles?.email || 'Nessuna Email'}</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase">Sezione:</span>
-                      <span className="px-2 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded uppercase">
+                      <span className="text-[10px] font-black text-slate-400 uppercase">Per Sezione:</span>
+                      <span className={`px-2 py-0.5 text-white text-[9px] font-black rounded uppercase ${
+                        req.sezione === 'LAVORO' ? 'bg-yellow-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-green-600'
+                      }`}>
                         {req.sezione}
                       </span>
                     </div>
@@ -157,24 +188,24 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                   <div className="flex gap-2">
                     <button 
                       onClick={() => handleUpdatePermission(req.id, 'AUTORIZZATO')}
-                      className="flex-1 py-3 bg-green-500 text-white rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-green-600 shadow-md active:scale-95 transition-all"
+                      className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md active:scale-95 transition-all"
                     >
-                      <Check size={14} /> Approva
+                      <Check size={14} /> Abilita
                     </button>
                     <button 
                       onClick={() => handleUpdatePermission(req.id, 'NEGATO')}
-                      className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-red-100 active:scale-95 transition-all"
+                      className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-500 active:scale-95 transition-all"
                     >
-                      <X size={14} /> Rifiuta
+                      <X size={14} /> Nega
                     </button>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="col-span-full py-12 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
+              <div className="col-span-full py-16 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
                 <ShieldCheck size={48} className="opacity-10 mb-4" />
-                <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta in sospeso</p>
-                <p className="text-[10px] mt-1 italic">I permessi sono aggiornati.</p>
+                <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta</p>
+                <p className="text-[10px] mt-1 italic">Tutti gli utenti sono stati gestiti.</p>
               </div>
             )}
           </div>
@@ -182,11 +213,11 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
       )}
 
       {profile?.role === 'ADMIN' && (
-        <div className="mt-12 flex items-center gap-3 px-8 py-4 bg-green-50 border-2 border-green-200 rounded-full text-green-700 shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="w-8 h-8 bg-green-200 rounded-full flex items-center justify-center">
-            <CheckCircle2 size={20} />
+        <div className="mt-12 flex items-center gap-3 px-8 py-4 bg-blue-50 border-2 border-blue-200 rounded-full text-blue-700 shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center">
+            <ShieldCheck size={20} />
           </div>
-          <span className="text-sm font-black uppercase tracking-widest">Sessione Amministratore Attiva</span>
+          <span className="text-sm font-black uppercase tracking-widest">Admin Mode: {profile.username}</span>
         </div>
       )}
     </div>
