@@ -5,9 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    'process.env': {
-      API_KEY: process.env.API_KEY,
-    },
+    // Rimosso process.env.API_KEY da qui. 
+    // Ora la chiave è accessibile solo lato server (Vercel Functions).
+    'process.env': {} 
   },
   build: {
     outDir: 'dist',
