@@ -235,7 +235,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
             <Zap size={12} /> Live Updates Active
           </div>
           <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter italic mb-4 leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500">
-            LEONI <span className="text-blue-500">VIGEVANO</span>
+            PALLAMANO <span className="text-blue-500">VIGEVANO</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-xs">Under 14 Maschile • Stagione 2025/26</p>
         </div>
@@ -352,15 +352,15 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
 
                                         return (
                                           <div key={idx} className="bg-slate-900/80 border border-white/5 rounded-2xl p-4 flex items-center justify-between group/match hover:border-blue-500/30 transition-all">
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col min-w-0">
                                               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">{new Date(m.data_partita).toLocaleDateString('it-IT')}</span>
                                               <div className="flex items-center gap-2">
                                                 <div className={`w-1.5 h-1.5 rounded-full ${isHome ? 'bg-blue-500' : 'bg-slate-600'}`}></div>
-                                                <span className="text-[11px] font-black uppercase text-white truncate max-w-[120px]">{opponent}</span>
+                                                <span className="text-[11px] font-black uppercase text-white truncate max-w-[160px]">{opponent}</span>
                                               </div>
                                               <span className="text-[8px] font-bold text-slate-600 mt-1 uppercase">{isHome ? 'In Casa' : 'Trasferta'}</span>
                                             </div>
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-3 shrink-0">
                                               <div className="text-right">
                                                 <p className="text-lg font-black text-white leading-none tracking-tighter">
                                                   {isPlayed ? `${m.punti_casa} - ${m.punti_ospite}` : 'VS'}
@@ -424,7 +424,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                               <div className="flex justify-between items-center mb-6">
                                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                                   <Clock size={12} className="text-blue-500" />
-                                  {/* Fix: changed m.data_part_ita to m.data_partita */}
                                   {new Date(m.data_partita).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
                                 </span>
                                 {isAdmin && (
@@ -435,16 +434,16 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                                 )}
                               </div>
                               <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1 text-right">
-                                   <p className="font-black uppercase text-xs text-slate-100 truncate">{m.squadra_casa}</p>
+                                <div className="flex-1 text-right min-w-0">
+                                   <p className="font-black uppercase text-sm text-white truncate break-words">{m.squadra_casa}</p>
                                 </div>
-                                <div className={`px-6 py-3 rounded-2xl font-black text-2xl flex items-center gap-4 ${m.punti_casa !== null ? 'bg-slate-950 text-white shadow-inner' : 'bg-slate-800/50 text-slate-600'}`}>
+                                <div className={`px-6 py-3 rounded-2xl font-black text-2xl flex items-center gap-4 shrink-0 ${m.punti_casa !== null ? 'bg-slate-950 text-white shadow-inner border border-white/5' : 'bg-slate-800/50 text-slate-600'}`}>
                                   <span>{m.punti_casa ?? '-'}</span>
                                   <div className="w-px h-6 bg-white/5"></div>
                                   <span>{m.punti_ospite ?? '-'}</span>
                                 </div>
-                                <div className="flex-1 text-left">
-                                   <p className="font-black uppercase text-xs text-slate-100 truncate">{m.squadra_ospite}</p>
+                                <div className="flex-1 text-left min-w-0">
+                                   <p className="font-black uppercase text-sm text-white truncate break-words">{m.squadra_ospite}</p>
                                 </div>
                               </div>
                             </div>
@@ -551,7 +550,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                     <input type="number" value={matchForm.pCasa} onChange={e => setMatchForm({...matchForm, pCasa: e.target.value})} className="w-full p-4 bg-slate-950 border border-white/5 rounded-2xl font-black text-center text-xl text-white outline-none focus:border-blue-500 transition-all" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px) font-black uppercase text-slate-500 ml-2">Punti Ospite</label>
+                    <label className="text-[9px] font-black uppercase text-slate-500 ml-2">Punti Ospite</label>
                     <input type="number" value={matchForm.pOspite} onChange={e => setMatchForm({...matchForm, pOspite: e.target.value})} className="w-full p-4 bg-slate-950 border border-white/5 rounded-2xl font-black text-center text-xl text-white outline-none focus:border-blue-500 transition-all" />
                   </div>
                </div>
@@ -585,7 +584,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                   <label className="text-[9px] font-black uppercase text-slate-500 ml-2">Atleta</label>
                   <div className="relative">
                     <select value={statForm.giocatoreId} onChange={e => setStatForm({...statForm, giocatoreId: e.target.value})} className="w-full p-4 bg-slate-950 border border-white/5 rounded-2xl font-bold text-white outline-none focus:border-blue-500 appearance-none uppercase text-xs">
-                       <option value="">Seleziona Leone</option>
+                       <option value="">Seleziona Atleta</option>
                        {players.map(p => <option key={p.id} value={p.id}>{p.nome} (#{p.numero})</option>)}
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
@@ -618,7 +617,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black uppercase text-slate-500 ml-2">Numero</label>
-                    {/* Fix: changed number assignment to string from event to avoid TS type mismatch with initial state '' */}
                     <input type="number" value={newPlayer.numero} onChange={e => setNewPlayer({...newPlayer, numero: e.target.value})} className="w-full p-4 bg-slate-950 border border-white/5 rounded-2xl font-black text-center text-white outline-none focus:border-blue-500" />
                   </div>
                   <div className="space-y-2">
