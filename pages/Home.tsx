@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Briefcase, User, ShieldAlert, CheckCircle2, Copy, RefreshCw, Terminal, AlertTriangle, Users, Check, X, ShieldCheck } from 'lucide-react';
+import { Trophy, Briefcase, User, CheckCircle2, RefreshCw, Users, Check, X, ShieldCheck } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -22,18 +22,9 @@ interface Props {
 }
 
 const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
-  const [refreshing, setRefreshing] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   
-  const userId = profile?.id || session?.user?.id;
-  const userEmail = profile?.email || session?.user?.email;
-  const username = userEmail?.split('@')[0] || 'Admin';
-  
-  const sqlCommand = `INSERT INTO profiles (id, email, username, role) 
-VALUES ('${userId}', '${userEmail}', '${username}', 'ADMIN')
-ON CONFLICT (id) DO UPDATE SET role = 'ADMIN';`;
-
   const fetchRequests = useCallback(async () => {
     if (profile?.role !== 'ADMIN') return;
     setLoadingRequests(true);
@@ -75,22 +66,9 @@ ON CONFLICT (id) DO UPDATE SET role = 'ADMIN';`;
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(sqlCommand);
-    alert("Comando SQL Copiato!");
-  };
-
-  const handleRefresh = async () => {
-    if (onRefresh) {
-      setRefreshing(true);
-      await onRefresh();
-      setRefreshing(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 pt-12 pb-24">
-      <div className="text-center mb-12">
+      <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
         <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4 tracking-tight uppercase">
           PORTALE <span className="text-blue-600">ANDREA</span> <span className="text-yellow-600">SPAGGIARI</span>
         </h1>
@@ -138,7 +116,7 @@ ON CONFLICT (id) DO UPDATE SET role = 'ADMIN';`;
 
       {/* Admin Panel: Gestione Richieste */}
       {profile?.role === 'ADMIN' && (
-        <div className="w-full max-w-6xl space-y-6">
+        <div className="w-full max-w-6xl space-y-6 animate-in fade-in duration-1000">
           <div className="flex items-center justify-between px-4">
             <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
               <ShieldCheck className="text-blue-600" /> Gestione Richieste Accesso
@@ -196,59 +174,9 @@ ON CONFLICT (id) DO UPDATE SET role = 'ADMIN';`;
               <div className="col-span-full py-12 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
                 <ShieldCheck size={48} className="opacity-10 mb-4" />
                 <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta in sospeso</p>
-                <p className="text-[10px] mt-1 italic">Tutti i permessi sono stati elaborati.</p>
+                <p className="text-[10px] mt-1 italic">I permessi sono aggiornati.</p>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Messaggio diagnostico se non sei ancora pienamente ADMIN nel DB */}
-      {profile?.role !== 'ADMIN' && (
-        <div className="w-full max-w-4xl bg-orange-50 border-2 border-orange-200 rounded-[2.5rem] p-8 shadow-inner overflow-hidden relative mt-12">
-          <div className="absolute top-0 right-0 p-4 opacity-5">
-            <Terminal size={120} />
-          </div>
-          
-          <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
-            <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-600 shrink-0 shadow-sm animate-pulse">
-              <AlertTriangle size={40} />
-            </div>
-            
-            <div className="flex-1 text-center md:text-left">
-              <h3 className="text-2xl font-black text-orange-900 uppercase tracking-tighter">Profilo non autorizzato</h3>
-              <p className="text-orange-700 text-sm mt-1 leading-relaxed">
-                Il tuo account ({userEmail}) non ha ancora i privilegi di amministratore.
-              </p>
-              
-              <div className="mt-6 flex flex-col gap-3">
-                <div className="bg-white p-4 rounded-2xl border border-orange-200 shadow-sm">
-                  <p className="text-[10px] font-black text-red-500 uppercase mb-2">Esegui questo in Supabase:</p>
-                  <div className="flex flex-col sm:flex-row items-center gap-3">
-                    <code className="text-[10px] font-mono bg-slate-900 p-3 rounded-xl flex-1 break-all text-yellow-400 border border-slate-700">
-                      {sqlCommand}
-                    </code>
-                    <button 
-                      onClick={copyToClipboard}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase hover:bg-black transition shadow-lg active:scale-95"
-                    >
-                      <Copy size={14} /> Copia
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
-                  <button 
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-orange-600 text-white text-xs font-black rounded-2xl uppercase hover:bg-orange-700 transition shadow-xl active:scale-95 disabled:opacity-50"
-                  >
-                    <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-                    {refreshing ? 'Verifica...' : 'Verifica Ora'}
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
