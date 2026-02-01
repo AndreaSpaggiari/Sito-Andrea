@@ -11,7 +11,11 @@ import {
 } from '../types';
 import { processLabelImage } from '../geminiService';
 import Chat from '../components/Chat';
-import { ArrowLeft, RefreshCw, Camera, Upload, Keyboard, CheckCircle2, PlayCircle, X, Settings, Calendar, Laptop, ClipboardList, Box, SortAsc, Hash, User, Clock, Ruler, ArrowRight } from 'lucide-react';
+import { 
+  ArrowLeft, RefreshCw, Camera, Upload, Keyboard, CheckCircle2, PlayCircle, X, 
+  Settings, Calendar, Laptop, ClipboardList, Box, SortAsc, Hash, User, Clock, 
+  Ruler, ArrowRight, BarChart3, Filter, Scale, Activity, PieChart, ChevronDown
+} from 'lucide-react';
 
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
 const formatShortDate = (dateStr: string | null) => {
@@ -35,6 +39,12 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 
 type SortCriteria = 'scheda' | 'cliente' | 'data' | 'misura';
 
+interface StatsResult {
+  totalKg: number;
+  totalCount: number;
+  byFase: { [key: string]: { label: string; kg: number; count: number } };
+}
+
 const Produzione: React.FC = () => {
   const [selectedMacchina, setSelectedMacchina] = useState<string | null>(localStorage.getItem('kme_selected_macchina'));
   const [macchine, setMacchine] = useState<Macchina[]>([]);
@@ -49,6 +59,13 @@ const Produzione: React.FC = () => {
   const [showScanOptions, setShowScanOptions] = useState(false);
   const [sortCriteria, setSortCriteria] = useState<SortCriteria>('scheda');
 
+  // Stats States
+  const [showStatsConfig, setShowStatsConfig] = useState(false);
+  const [statsPeriod, setStatsPeriod] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const [statsDates, setStatsDates] = useState({ start: formatDate(new Date()), end: formatDate(new Date()) });
+  const [selectedFaseIds, setSelectedFaseIds] = useState<string[]>([]);
+  const [statsData, setStatsData] = useState<StatsResult | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,7 +74,10 @@ const Produzione: React.FC = () => {
       const { data: m } = await supabase.from('l_macchine').select('*').order('macchina');
       const { data: f } = await supabase.from('l_fasi_di_lavorazione').select('*').order('fase_di_lavorazione');
       if (m) setMacchine(m);
-      if (f) setFasi(f);
+      if (f) {
+        setFasi(f);
+        setSelectedFaseIds(f.map(i => i.id_fase));
+      }
     } catch (e) { console.error(e); }
   }, []);
 
@@ -77,6 +97,69 @@ const Produzione: React.FC = () => {
   }, [selectedMacchina]);
 
   useEffect(() => { fetchLavorazioni(); }, [fetchLavorazioni]);
+
+  const generateStats = async () => {
+    setLoading(true);
+    try {
+      let start = statsDates.start;
+      let end = statsDates.end;
+
+      if (statsPeriod === 'today') {
+        start = formatDate(new Date());
+        end = start;
+      } else if (statsPeriod === 'week') {
+        const d = new Date();
+        const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        start = formatDate(new Date(d.setDate(diff)));
+        end = formatDate(new Date());
+      } else if (statsPeriod === 'month') {
+        const d = new Date();
+        start = formatDate(new Date(d.getFullYear(), d.getMonth(), 1));
+        end = formatDate(new Date());
+      }
+
+      let query = supabase
+        .from('l_lavorazioni')
+        .select('*, l_fasi_di_lavorazione(*)')
+        .eq('id_stato', Stati.TER)
+        .gte('fine_lavorazione', `${start}T00:00:00`)
+        .lte('fine_lavorazione', `${end}T23:59:59`);
+
+      if (selectedFaseIds.length < fasi.length) {
+        query = query.in('id_fase', selectedFaseIds);
+      }
+
+      const { data, error } = query;
+      const { data: results, error: err } = await query;
+      if (err) throw err;
+
+      const result: StatsResult = {
+        totalKg: 0,
+        totalCount: results?.length || 0,
+        byFase: {}
+      };
+
+      results?.forEach((l: Lavorazione) => {
+        const kg = l.ordine_kg_lavorato || 0;
+        result.totalKg += kg;
+
+        const faseId = l.id_fase;
+        const faseLabel = l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'NON DEFINITO';
+
+        if (!result.byFase[faseId]) {
+          result.byFase[faseId] = { label: faseLabel, kg: 0, count: 0 };
+        }
+        result.byFase[faseId].kg += kg;
+        result.byFase[faseId].count += 1;
+      });
+
+      setStatsData(result);
+    } catch (e: any) {
+      alert("Errore generazione statistiche: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -323,6 +406,13 @@ const Produzione: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <button 
+                  onClick={() => setShowStatsConfig(true)}
+                  className="p-2 bg-white text-yellow-700 rounded-xl shadow-sm border border-yellow-200 active:scale-90 transition-all hover:bg-yellow-50 flex items-center gap-2"
+                >
+                  <BarChart3 size={18} />
+                  <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">Stats</span>
+                </button>
                 <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-yellow-200">
                   <Calendar size={14} className="text-yellow-600" />
                   <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent border-none p-0 font-black text-[11px] text-slate-800 outline-none w-24" />
@@ -362,6 +452,177 @@ const Produzione: React.FC = () => {
 
         {/* Floating Action Button */}
         <button onClick={() => setShowScanOptions(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-2xl border-2 border-white z-40 transition-transform active:scale-110 hover:bg-yellow-700"><Camera size={24} /></button>
+
+        {/* Modal Statistiche */}
+        {showStatsConfig && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-[150] overflow-y-auto">
+            <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-2xl shadow-2xl border-t-8 border-yellow-500 animate-in zoom-in duration-200 my-auto max-h-[95vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center text-yellow-600 shadow-inner">
+                    <BarChart3 size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter leading-none">Statistiche Produzione</h3>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Analisi dati e carichi di lavoro</p>
+                  </div>
+                </div>
+                <button onClick={() => { setShowStatsConfig(false); setStatsData(null); }} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><X size={24} /></button>
+              </div>
+
+              {!statsData ? (
+                <div className="space-y-8 py-4">
+                  {/* Selezione Periodo */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Scegli Periodo</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: 'today', label: 'Oggi' },
+                        { id: 'week', label: 'Settimana' },
+                        { id: 'month', label: 'Mese' },
+                        { id: 'custom', label: 'Intervallo' }
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setStatsPeriod(p.id as any)}
+                          className={`py-3 rounded-2xl font-black text-[11px] uppercase transition-all ${statsPeriod === p.id ? 'bg-yellow-500 text-white shadow-lg scale-105' : 'bg-gray-50 text-slate-500 hover:bg-gray-100'}`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {statsPeriod === 'custom' && (
+                    <div className="grid grid-cols-2 gap-4 p-5 bg-yellow-50/50 rounded-3xl border border-yellow-100 animate-in fade-in slide-in-from-top-2">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-yellow-600 uppercase ml-2">Data Inizio</label>
+                        <input type="date" value={statsDates.start} onChange={(e) => setStatsDates({...statsDates, start: e.target.value})} className="w-full bg-white border border-yellow-200 rounded-xl p-3 font-bold text-slate-800 outline-none" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-yellow-600 uppercase ml-2">Data Fine</label>
+                        <input type="date" value={statsDates.end} onChange={(e) => setStatsDates({...statsDates, end: e.target.value})} className="w-full bg-white border border-yellow-200 rounded-xl p-3 font-bold text-slate-800 outline-none" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Selezione Lavorazioni */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3 px-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipi Lavorazione</label>
+                      <button 
+                        onClick={() => setSelectedFaseIds(selectedFaseIds.length === fasi.length ? [] : fasi.map(f => f.id_fase))}
+                        className="text-[9px] font-black text-blue-600 uppercase hover:underline"
+                      >
+                        {selectedFaseIds.length === fasi.length ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                      {fasi.map(f => (
+                        <label key={f.id_fase} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedFaseIds.includes(f.id_fase) ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}>
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" 
+                            checked={selectedFaseIds.includes(f.id_fase)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedFaseIds([...selectedFaseIds, f.id_fase]);
+                              else setSelectedFaseIds(selectedFaseIds.filter(id => id !== f.id_fase));
+                            }}
+                          />
+                          <span className="text-[10px] font-bold text-slate-700 uppercase">{f.fase_di_lavorazione}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={generateStats}
+                    disabled={selectedFaseIds.length === 0}
+                    className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    <PieChart size={20} />
+                    Elabora Report Produzione
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                  {/* Headline Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-yellow-500 p-6 rounded-[2rem] text-white shadow-lg relative overflow-hidden group">
+                      <Scale className="absolute -bottom-2 -right-2 opacity-20 group-hover:scale-110 transition-transform" size={80} />
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Totale Prodotto</p>
+                      <p className="text-4xl font-black mt-1">{statsData.totalKg.toLocaleString()} <span className="text-xl">KG</span></p>
+                    </div>
+                    <div className="bg-slate-900 p-6 rounded-[2rem] text-white shadow-lg relative overflow-hidden group">
+                      <ClipboardList className="absolute -bottom-2 -right-2 opacity-20 group-hover:scale-110 transition-transform" size={80} />
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Schede Chiuse</p>
+                      <p className="text-4xl font-black mt-1">{statsData.totalCount}</p>
+                    </div>
+                  </div>
+
+                  {/* Breakdown Area */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 px-2">
+                      <Activity size={16} className="text-yellow-600" />
+                      <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Dettaglio per Lavorazione</h4>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {/* Fix: casting Object.values to correct type to fix TS unknown errors */}
+                      {(Object.values(statsData.byFase) as Array<{ label: string; kg: number; count: number }>)
+                        .sort((a, b) => b.kg - a.kg)
+                        .map((f, idx) => {
+                          const percentage = statsData.totalKg > 0 ? (f.kg / statsData.totalKg) * 100 : 0;
+                          return (
+                            <div key={idx} className="bg-gray-50 rounded-2xl p-4 border border-gray-100 hover:border-yellow-200 transition-colors">
+                              <div className="flex justify-between items-end mb-2">
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-800 uppercase truncate max-w-[200px]">{f.label}</p>
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{f.count} SCHEDE</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-black text-slate-900">{f.kg.toLocaleString()} KG</p>
+                                  <p className="text-[9px] font-black text-yellow-600">{percentage.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-yellow-500 rounded-full transition-all duration-1000" 
+                                  style={{ width: `${percentage}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      
+                      {Object.keys(statsData.byFase).length === 0 && (
+                        <div className="text-center py-12 bg-gray-50 rounded-3xl border border-dashed border-gray-200 text-slate-400">
+                          <Box size={40} className="mx-auto opacity-20 mb-3" />
+                          <p className="text-[10px] font-black uppercase tracking-widest">Nessun dato per questo periodo</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button 
+                      onClick={() => setStatsData(null)}
+                      className="flex-1 py-4 bg-gray-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
+                    >
+                      Nuova Analisi
+                    </button>
+                    <button 
+                      onClick={() => { setShowStatsConfig(false); setStatsData(null); }}
+                      className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
+                    >
+                      Chiudi Report
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Picker Macchina */}
         {showMacchinaPicker && (

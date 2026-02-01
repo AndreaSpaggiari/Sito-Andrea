@@ -4,19 +4,19 @@ import { GoogleGenAI, Type } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const processLabelImage = async (base64Image: string) => {
+  // Fix: use direct Content object for contents as per SDK guidelines
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: [
-      {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: base64Image
-            }
-          },
-          {
-            text: `Sei un sistema di data entry per KME ITALY SPA. Analizza l'immagine della scheda tecnica e restituisci un JSON.
+    contents: {
+      parts: [
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: base64Image
+          }
+        },
+        {
+          text: `Sei un sistema di data entry per KME ITALY SPA. Analizza l'immagine della scheda tecnica e restituisci un JSON.
             
             MAPPA QUESTI CAMPI DALL'IMMAGINE:
             - "Scheda n°" -> scheda (Numero Intero)
@@ -36,10 +36,9 @@ export const processLabelImage = async (base64Image: string) => {
             REGOLE:
             - Se un valore non è leggibile, usa null.
             - Restituisci esclusivamente il JSON.`
-          }
-        ]
-      }
-    ],
+        }
+      ]
+    },
     config: {
       responseMimeType: "application/json",
       responseSchema: {
