@@ -423,8 +423,8 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
             <div className="animate-in fade-in duration-500">
                <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 px-2 gap-6">
                  <div>
-                   <h3 className="text-3xl sm:text-4xl font-black text-white uppercase italic tracking-tighter leading-none">Statistiche <span className="text-blue-500">Individuali</span></h3>
-                   <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-2 italic">Dati Cumulati Stagione 2025/26</p>
+                   <h3 className="text-3xl sm:text-4xl font-black text-white uppercase italic tracking-tighter leading-none">STATISTICHE STAGIONE <span className="text-blue-500">2025/2026</span></h3>
+                   <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-2 italic">Under 14 maschile</p>
                  </div>
                  {isAdmin && (
                    <button onClick={() => { setEditingStat(null); setStatForm(initialStatState); setShowAddStat(true); }} className="bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
