@@ -95,18 +95,13 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
           
-          <Route path="/" element={
-            <ProtectedRoute session={session} profile={profile}>
-              <Home profile={profile} session={session} onRefresh={refreshProfile} />
-            </ProtectedRoute>
-          } />
+          {/* HOME PAGE PUBBLICA */}
+          <Route path="/" element={<Home profile={profile} session={session} onRefresh={refreshProfile} />} />
           
-          <Route path="/pallamano" element={
-            <ProtectedRoute session={session} section="PALLAMANO" profile={profile}>
-              <Pallamano profile={profile} />
-            </ProtectedRoute>
-          } />
+          {/* SEZIONE PALLAMANO PUBBLICA */}
+          <Route path="/pallamano" element={<Pallamano profile={profile} />} />
           
+          {/* SEZIONI PROTETTE */}
           <Route path="/lavoro" element={
             <ProtectedRoute session={session} section="LAVORO" profile={profile}>
               <Lavoro />

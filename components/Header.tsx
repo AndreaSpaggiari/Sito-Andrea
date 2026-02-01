@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Trophy, Briefcase, User, LogOut, Shield, UserCheck, Loader2 } from 'lucide-react';
+import { Home, Trophy, Briefcase, User, LogOut, Shield, UserCheck, Loader2, LogIn } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -45,7 +45,7 @@ const Header: React.FC<Props> = ({ profile, session }) => {
             </Link>
           </div>
 
-          {(profile || session) && (
+          {(profile || session) ? (
             <div className="flex items-center gap-4 pl-6 border-l border-white/20">
               <div className="flex flex-col items-end">
                 <div className="flex items-center gap-2">
@@ -71,6 +71,10 @@ const Header: React.FC<Props> = ({ profile, session }) => {
                 </button>
               </div>
             </div>
+          ) : (
+            <Link to="/login" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest">
+              <LogIn size={14} /> Accedi
+            </Link>
           )}
         </nav>
       </div>
