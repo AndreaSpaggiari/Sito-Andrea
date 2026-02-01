@@ -1,11 +1,11 @@
 
-# Script SQL Finale per Supabase (VERSIONE SECURITY)
+# Guida Configurazione Database Supabase
 
-Copia e incolla questo blocco nel SQL Editor di Supabase e premi "RUN".
+## 1. Esegui lo Script SQL
+Vai nella sezione **SQL Editor** di Supabase, incolla questo codice e premi **RUN**:
 
-## 1. Tabelle Profili e Permessi
 ```sql
--- Tabella Profili (estende auth.users)
+-- TABELLE E INDICI ESISTENTI (Profili e Permessi)
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   email text,
@@ -14,40 +14,48 @@ create table if not exists public.profiles (
   created_at timestamp with time zone default now()
 );
 
--- Tabella Permessi Sezioni
 create table if not exists public.l_permessi (
   id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
   sezione text not null check (sezione in ('PALLAMANO', 'LAVORO', 'PERSONALE')),
   stato text default 'RICHIESTO' check (stato in ('RICHIESTO', 'AUTORIZZATO', 'NEGATO')),
   created_at timestamp with time zone default now(),
   unique(user_id, sezione)
 );
 
--- RLS per Profili
-alter table public.profiles enable row level security;
-drop policy if exists "Profili visibili a tutti" on profiles;
-drop policy if exists "Utenti possono inserire il proprio profilo" on profiles;
-drop policy if exists "Utenti possono aggiornare il proprio profilo" on profiles;
-
-create policy "Profili visibili a tutti" on profiles for select using (true);
-create policy "Utenti possono inserire il proprio profilo" on profiles for insert with check (auth.uid() = id);
-create policy "Utenti possono aggiornare il proprio profilo" on profiles for update using (auth.uid() = id);
-
--- RLS per Permessi
-alter table public.l_permessi enable row level security;
-drop policy if exists "Utenti possono vedere i propri permessi" on l_permessi;
-drop policy if exists "Utenti possono richiedere permessi" on l_permessi;
-drop policy if exists "Admin può tutto sui permessi" on l_permessi;
-
-create policy "Utenti possono vedere i propri permessi" on l_permessi for select using (auth.uid() = user_id);
-create policy "Utenti possono richiedere permessi" on l_permessi for insert with check (auth.uid() = user_id);
-create policy "Admin può tutto sui permessi" on l_permessi for all using (
-  exists (select 1 from profiles where id = auth.uid() and role = 'ADMIN')
+-- NUOVA TABELLA PALLAMANO (RISULTATI)
+create table if not exists public.p_partite (
+  id uuid default gen_random_uuid() primary key,
+  campionato text not null default 'Under 14 Maschile',
+  squadra_casa text not null,
+  squadra_ospite text not null,
+  punti_casa integer default 0,
+  punti_ospite integer default 0,
+  data_partita date default current_date,
+  note text,
+  created_at timestamp with time zone default now()
 );
+
+-- CONFIGURA IL TUO ACCOUNT COME ADMIN
+UPDATE profiles SET role = 'ADMIN' WHERE email = 'spaggiaricrotti@gmail.com';
+
+-- TABELLA CHAT
+create table if not exists public.messages (
+  id uuid default gen_random_uuid() primary key,
+  sender_name text not null,
+  recipient_name text default 'ALL',
+  content text not null,
+  created_at timestamp with time zone default now()
+);
+
+-- ABILITA REAL-TIME (Esegui queste righe se non lo hai fatto da UI)
+alter publication supabase_realtime add table l_permessi;
+alter publication supabase_realtime add table messages;
+alter publication supabase_realtime add table p_partite;
 ```
 
-## 2. DIVENTA AMMINISTRATORE (Esegui questo dopo esserti registrato)
-```sql
-UPDATE profiles SET role = 'ADMIN' WHERE email = 'spaggiariandrea75@gmail.com';
-```
+## 2. Attiva il Real-time (Manualmente dalla Dashboard)
+Se lo script sopra non bastasse:
+1. Menù **Database** -> **Publications**.
+2. Modifica **supabase_realtime**.
+3. Aggiungi le tabelle: `l_permessi`, `messages`, `p_partite`.

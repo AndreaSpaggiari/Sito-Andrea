@@ -33,6 +33,19 @@ export interface UserPermission {
   stato: PermissionStatus;
 }
 
+// Tipi Pallamano
+export interface HandballMatch {
+  id: string;
+  created_at: string;
+  campionato: string;
+  squadra_casa: string;
+  squadra_ospite: string;
+  punti_casa: number;
+  punti_ospite: number;
+  data_partita: string;
+  note?: string;
+}
+
 // Tipi Produzione
 export interface Macchina {
   id_macchina: string;

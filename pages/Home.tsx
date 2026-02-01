@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Briefcase, User, CheckCircle2, RefreshCw, Users, Check, X, ShieldCheck } from 'lucide-react';
+import { Trophy, Briefcase, User, CheckCircle2, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -25,27 +25,47 @@ interface Props {
 const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   
   const fetchRequests = useCallback(async () => {
     if (profile?.role !== 'ADMIN') return;
     setLoadingRequests(true);
+    setDebugInfo(null);
+    
     try {
-      // Query più robusta senza alias complessi
-      const { data, error } = await supabase
+      // Step 1: Recupera le richieste di permesso
+      const { data: permessi, error: permError } = await supabase
         .from('l_permessi')
-        .select(`
-          id,
-          sezione,
-          stato,
-          user_id,
-          profiles:user_id (username, email)
-        `)
+        .select('*')
         .eq('stato', 'RICHIESTO');
       
-      if (error) throw error;
-      if (data) setPendingRequests(data as any[]);
-    } catch (e) {
+      if (permError) throw permError;
+
+      if (permessi && permessi.length > 0) {
+        // Step 2: Recupera i profili degli utenti coinvolti per avere nomi ed email
+        const userIds = permessi.map(p => p.user_id);
+        const { data: profili, error: profError } = await supabase
+          .from('profiles')
+          .select('id, username, email')
+          .in('id', userIds);
+          
+        if (profError) {
+          console.warn("Errore recupero profili, mostro solo ID:", profError);
+        }
+
+        // Step 3: Unione manuale dei dati
+        const combined = permessi.map(p => ({
+          ...p,
+          profiles: profili?.find(pr => pr.id === p.user_id)
+        }));
+        
+        setPendingRequests(combined as any[]);
+      } else {
+        setPendingRequests([]);
+      }
+    } catch (e: any) {
       console.error("Errore recupero richieste:", e);
+      setDebugInfo(e.message);
     } finally {
       setLoadingRequests(false);
     }
@@ -56,15 +76,13 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
 
     fetchRequests();
 
-    // Configurazione Real-time: ascolta nuovi permessi inseriti o aggiornati
+    // Ascolta i cambiamenti in tempo reale
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('home-admin-updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'l_permessi' },
-        () => {
-          fetchRequests(); // Ricarica la lista quando cambia qualcosa
-        }
+        () => fetchRequests()
       )
       .subscribe();
 
@@ -80,11 +98,10 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         .update({ stato: newState })
         .eq('id', id);
       
-      if (!error) {
-        setPendingRequests(prev => prev.filter(req => req.id !== id));
-      } else {
-        throw error;
-      }
+      if (error) throw error;
+      
+      // Ottimizzazione UI: rimuovi subito la card
+      setPendingRequests(prev => prev.filter(req => req.id !== id));
     } catch (e) {
       alert("Errore durante l'aggiornamento del permesso");
     }
@@ -146,16 +163,23 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
               <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                 <ShieldCheck className="text-blue-600" /> Richieste in Sospeso
               </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Aggiornamento in tempo reale attivo</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Sincronizzazione manuale + Real-time attiva</p>
             </div>
             <button 
               onClick={fetchRequests} 
-              className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-              title="Aggiorna manualmente"
+              className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-2xl shadow-sm transition-all active:scale-90"
+              title="Aggiorna ora"
             >
               <RefreshCw size={20} className={loadingRequests ? 'animate-spin' : ''} />
             </button>
           </div>
+
+          {debugInfo && (
+            <div className="mx-4 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600">
+              <AlertTriangle size={20} />
+              <p className="text-xs font-bold uppercase tracking-tight">Errore Database: {debugInfo}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pendingRequests.length > 0 ? (
@@ -166,17 +190,17 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                       <Users size={24} />
                     </div>
                     <span className="text-[10px] font-black px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full uppercase tracking-widest">
-                      In Attesa
+                      Nuova
                     </span>
                   </div>
                   
                   <div className="mb-6">
                     <p className="text-sm font-black text-slate-900 uppercase truncate">
-                      {req.profiles?.username || 'Utente Senza Nome'}
+                      {req.profiles?.username || 'Utente (ID: ' + req.user_id.substring(0,5) + '...)'}
                     </p>
-                    <p className="text-[10px] text-slate-400 font-bold mb-3 truncate">{req.profiles?.email || 'Nessuna Email'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold mb-3 truncate">{req.profiles?.email || 'Profilo non trovato'}</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase">Per Sezione:</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase">Sezione:</span>
                       <span className={`px-2 py-0.5 text-white text-[9px] font-black rounded uppercase ${
                         req.sezione === 'LAVORO' ? 'bg-yellow-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-green-600'
                       }`}>
@@ -205,7 +229,7 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
               <div className="col-span-full py-16 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
                 <ShieldCheck size={48} className="opacity-10 mb-4" />
                 <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta</p>
-                <p className="text-[10px] mt-1 italic">Tutti gli utenti sono stati gestiti.</p>
+                <p className="text-[10px] mt-1 italic">I permessi sono tutti aggiornati.</p>
               </div>
             )}
           </div>

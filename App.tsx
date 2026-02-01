@@ -103,7 +103,7 @@ const App: React.FC = () => {
           
           <Route path="/pallamano" element={
             <ProtectedRoute session={session} section="PALLAMANO" profile={profile}>
-              <Pallamano />
+              <Pallamano profile={profile} />
             </ProtectedRoute>
           } />
           
