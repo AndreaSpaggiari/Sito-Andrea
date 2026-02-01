@@ -40,33 +40,48 @@ export interface HandballMatch {
   campionato: string;
   squadra_casa: string;
   squadra_ospite: string;
-  punti_casa: number;
-  punti_ospite: number;
+  punti_casa: number | null;
+  punti_ospite: number | null;
   data_partita: string;
+  giornata?: number;
   note?: string;
 }
 
-// Tipi Produzione
-export interface Macchina {
-  id_macchina: string;
-  macchina: string;
+export interface HandballStanding {
+  pos: number;
+  squadra: string;
+  punti: number;
+  giocate: number;
+  vinte: number;
+  nulle: number;
+  perse: number;
+  gf: number;
+  gs: number;
+  dr: number;
+  andamento: ('V' | 'N' | 'P')[];
 }
 
-export interface FaseLavorazione {
-  id_fase: string;
-  fase_di_lavorazione: string;
+export interface HandballPlayer {
+  id: string;
+  nome: string;
+  numero: number;
+  ruolo: string;
+  foto_url?: string;
 }
 
-export interface Cliente {
-  id_cliente: string;
-  cliente: string;
+export interface PlayerStats {
+  nome: string;
+  partite: number;
+  goal: number;
+  ammonizioni: number;
+  esclusioni: number;
 }
 
-export interface StatoLavorazione {
-  id_stato: string;
-  stato_lavorazione: string;
-}
-
+// Tipi Produzione (Invariati)
+export interface Macchina { id_macchina: string; macchina: string; }
+export interface FaseLavorazione { id_fase: string; fase_di_lavorazione: string; }
+export interface Cliente { id_cliente: string; cliente: string; }
+export interface StatoLavorazione { id_stato: string; stato_lavorazione: string; }
 export interface Lavorazione {
   id_lavorazione: string; 
   id_macchina: string;
@@ -91,16 +106,9 @@ export interface Lavorazione {
   numero_pezzi: number | null;
   metri_avvolti: number | null;
   data_consegna: string | null;
-  
-  // Joined fields
   l_clienti?: Cliente;
   l_macchine?: Macchina;
   l_fasi_di_lavorazione?: FaseLavorazione;
 }
 
-export enum Stati {
-  ATT = 'ATT', // In Attesa
-  PRO = 'PRO', // In Produzione
-  EXT = 'EXT', // In Uscita
-  TER = 'TER'  // Terminata
-}
+export enum Stati { ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }
