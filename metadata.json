@@ -1,0 +1,7 @@
+{
+  "name": "Andrea - Sito Personale",
+  "description": "A multi-section personal portal for Andrea Spaggiari featuring sports, work, and personal contents with a real-time chat system powered by Supabase.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
