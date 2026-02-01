@@ -1,9 +1,9 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { UserProfile, SectionType, PermissionStatus } from '../types';
-import { Lock, Clock, RefreshCw } from 'lucide-react';
+import { Lock, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -16,13 +16,13 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
   const [permission, setPermission] = useState<PermissionStatus | null>(null);
   const [loading, setLoading] = useState(!!section);
 
-  const checkPermission = async () => {
+  const checkPermission = useCallback(async () => {
     if (!session || !section || !profile) {
       setLoading(false);
       return;
     }
     
-    // Gli admin hanno sempre accesso
+    // Gli admin hanno sempre accesso immediato
     if (profile.role === 'ADMIN') {
       setPermission('AUTORIZZATO');
       setLoading(false);
@@ -35,7 +35,7 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
         .select('stato')
         .eq('user_id', session.user.id)
         .eq('sezione', section)
-        .maybeSingle(); // maybeSingle non genera errore se non trova nulla
+        .maybeSingle();
       
       if (data) setPermission(data.stato as PermissionStatus);
       else setPermission(null);
@@ -44,11 +44,11 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
     } finally {
       setLoading(false);
     }
-  };
+  }, [session, section, profile]);
 
   useEffect(() => {
     checkPermission();
-  }, [session, section, profile]);
+  }, [checkPermission]);
 
   if (!session) {
     return <Navigate to="/login" />;
@@ -73,16 +73,25 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
 
 const AccessDeniedScreen = ({ section, status, userId, onRefresh }: { section: SectionType, status: PermissionStatus | null, userId: string, onRefresh: () => void }) => {
   const [requesting, setRequesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(status === 'RICHIESTO');
 
   const requestAccess = async () => {
     setRequesting(true);
-    const { error } = await supabase
-      .from('l_permessi')
-      .upsert({ user_id: userId, sezione: section, stato: 'RICHIESTO' }, { onConflict: 'user_id,sezione' });
-    
-    if (!error) setDone(true);
-    setRequesting(false);
+    setError(null);
+    try {
+      const { error: upsertError } = await supabase
+        .from('l_permessi')
+        .upsert({ user_id: userId, sezione: section, stato: 'RICHIESTO' }, { onConflict: 'user_id,sezione' });
+      
+      if (upsertError) throw upsertError;
+      setDone(true);
+    } catch (e: any) {
+      console.error("Errore invio richiesta:", e);
+      setError(e.message || "Errore sconosciuto durante l'invio");
+    } finally {
+      setRequesting(false);
+    }
   };
 
   const colors = {
@@ -102,12 +111,19 @@ const AccessDeniedScreen = ({ section, status, userId, onRefresh }: { section: S
           La sezione <span className={`font-black px-2 py-0.5 rounded ${colors[section]}`}>{section}</span> è riservata.<br/>
           Richiedi l'abilitazione ad Andrea per procedere.
         </p>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-2 text-red-600 text-[10px] font-black uppercase text-left">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>Errore: {error}</span>
+          </div>
+        )}
         
         {done ? (
           <div className="p-5 bg-yellow-50 border border-yellow-200 rounded-2xl flex flex-col items-center gap-2">
             <Clock className="text-yellow-600 animate-pulse" />
-            <p className="text-xs font-black text-yellow-800 uppercase tracking-tight">Richiesta in attesa di approvazione</p>
-            <button onClick={onRefresh} className="mt-2 text-[10px] font-bold text-yellow-600 underline uppercase">Controlla di nuovo</button>
+            <p className="text-xs font-black text-yellow-800 uppercase tracking-tight">Richiesta inviata ad Andrea!</p>
+            <button onClick={onRefresh} className="mt-2 text-[10px] font-bold text-yellow-600 underline uppercase hover:text-yellow-800 transition-colors">Controlla se approvato</button>
           </div>
         ) : (
           <button 
@@ -115,7 +131,7 @@ const AccessDeniedScreen = ({ section, status, userId, onRefresh }: { section: S
             disabled={requesting}
             className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
           >
-            {requesting ? 'Invio in corso...' : 'RICHIEDI AUTORIZZAZIONE'}
+            {requesting ? 'Invio in corso...' : 'INVIA RICHIESTA'}
           </button>
         )}
         

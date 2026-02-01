@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Briefcase, User, CheckCircle2, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -10,6 +10,7 @@ interface PendingRequest {
   sezione: string;
   stato: string;
   user_id: string;
+  created_at: string;
   profiles?: {
     username: string;
     email: string;
@@ -23,67 +24,58 @@ interface Props {
 }
 
 const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const fetchRequests = useCallback(async () => {
     if (profile?.role !== 'ADMIN') return;
     setLoadingRequests(true);
-    setDebugInfo(null);
     
     try {
-      // Step 1: Recupera le richieste di permesso
-      const { data: permessi, error: permError } = await supabase
-        .from('l_permessi')
-        .select('*')
-        .eq('stato', 'RICHIESTO');
+      let query = supabase.from('l_permessi').select('*');
+      if (!showAll) query = query.eq('stato', 'RICHIESTO');
       
+      const { data: permessi, error: permError } = await query.order('created_at', { ascending: false });
       if (permError) throw permError;
 
       if (permessi && permessi.length > 0) {
-        // Step 2: Recupera i profili degli utenti coinvolti per avere nomi ed email
-        const userIds = permessi.map(p => p.user_id);
+        const userIds = [...new Set(permessi.map(p => p.user_id))];
         const { data: profili, error: profError } = await supabase
           .from('profiles')
           .select('id, username, email')
           .in('id', userIds);
           
         if (profError) {
-          console.warn("Errore recupero profili, mostro solo ID:", profError);
+          console.warn("Errore profili (Policy):", profError);
+          setDebugInfo("Controlla le Policy di Supabase per la tabella Profiles.");
         }
 
-        // Step 3: Unione manuale dei dati
         const combined = permessi.map(p => ({
           ...p,
           profiles: profili?.find(pr => pr.id === p.user_id)
         }));
-        
-        setPendingRequests(combined as any[]);
+        setRequests(combined as any[]);
       } else {
-        setPendingRequests([]);
+        setRequests([]);
       }
     } catch (e: any) {
-      console.error("Errore recupero richieste:", e);
       setDebugInfo(e.message);
     } finally {
       setLoadingRequests(false);
     }
-  }, [profile]);
+  }, [profile, showAll]);
 
   useEffect(() => {
     if (profile?.role !== 'ADMIN') return;
-
     fetchRequests();
 
-    // Ascolta i cambiamenti in tempo reale
     const channel = supabase
       .channel('home-admin-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'l_permessi' },
-        () => fetchRequests()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'l_permessi' }, () => fetchRequests())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchRequests())
       .subscribe();
 
     return () => {
@@ -92,20 +84,17 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   }, [profile, fetchRequests]);
 
   const handleUpdatePermission = async (id: string, newState: 'AUTORIZZATO' | 'NEGATO') => {
-    try {
-      const { error } = await supabase
-        .from('l_permessi')
-        .update({ stato: newState })
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      // Ottimizzazione UI: rimuovi subito la card
-      setPendingRequests(prev => prev.filter(req => req.id !== id));
-    } catch (e) {
-      alert("Errore durante l'aggiornamento del permesso");
-    }
+    const { error } = await supabase.from('l_permessi').update({ stato: newState }).eq('id', id);
+    if (!error) fetchRequests();
+    else alert("Errore: " + error.message);
   };
+
+  const filteredRequests = requests.filter(r => 
+    r.profiles?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.profiles?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.sezione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.user_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 pt-12 pb-24">
@@ -113,135 +102,116 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-4 tracking-tight uppercase">
           PORTALE <span className="text-blue-600">ANDREA</span> <span className="text-yellow-600">SPAGGIARI</span>
         </h1>
-        <p className="text-xl text-gray-600">Benvenuto. Gestisci le tue attività e i tuoi contenuti da un'unica dashboard.</p>
+        <p className="text-xl text-gray-600 italic">Gestione contenuti e permessi real-time.</p>
       </div>
 
-      {/* Grid Sezioni */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl mb-16">
-        <Link to="/pallamano" className="group relative overflow-hidden bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-          <div className="absolute inset-0 bg-blue-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
-          <div className="p-8 flex flex-col items-center text-center">
-            <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform shadow-inner">
-              <Trophy size={40} />
+        {[
+          { to: "/pallamano", color: "blue", icon: Trophy, label: "PALLAMANO", desc: "Risultati e Under 14" },
+          { to: "/lavoro", color: "yellow", icon: Briefcase, label: "LAVORO", desc: "Produzione e KME" },
+          { to: "/personale", color: "green", icon: User, label: "PERSONALE", desc: "Appunti e Casa" }
+        ].map((item, i) => (
+          <Link key={i} to={item.to} className="group relative overflow-hidden bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
+            <div className={`p-8 flex flex-col items-center text-center`}>
+              <div className={`w-20 h-20 bg-${item.color}-100 rounded-2xl flex items-center justify-center text-${item.color}-600 mb-6 group-hover:scale-110 transition-transform shadow-inner`}>
+                <item.icon size={40} />
+              </div>
+              <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">{item.label}</h2>
+              <p className="text-gray-500 text-sm">{item.desc}</p>
             </div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">PALLAMANO</h2>
-            <p className="text-gray-500 text-sm">Under 14, Risultati, Classifiche e Pallamano Vigevano.</p>
-          </div>
-          <div className="h-2 bg-blue-500 w-0 group-hover:w-full transition-all duration-500"></div>
-        </Link>
-
-        <Link to="/lavoro" className="group relative overflow-hidden bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-          <div className="absolute inset-0 bg-yellow-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
-          <div className="p-8 flex flex-col items-center text-center">
-            <div className="w-20 h-20 bg-yellow-100 rounded-2xl flex items-center justify-center text-yellow-600 mb-6 group-hover:scale-110 transition-transform shadow-inner">
-              <Briefcase size={40} />
-            </div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">LAVORO</h2>
-            <p className="text-gray-500 text-sm">Produzione, Utilità, Chat e Strumenti di Lavoro.</p>
-          </div>
-          <div className="h-2 bg-yellow-500 w-0 group-hover:w-full transition-all duration-500"></div>
-        </Link>
-
-        <Link to="/personale" className="group relative overflow-hidden bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-          <div className="absolute inset-0 bg-green-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
-          <div className="p-8 flex flex-col items-center text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-6 group-hover:scale-110 transition-transform shadow-inner">
-              <User size={40} />
-            </div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">PERSONALE</h2>
-            <p className="text-gray-500 text-sm">Casa, Hobby e contenuti personali vari.</p>
-          </div>
-          <div className="h-2 bg-green-500 w-0 group-hover:w-full transition-all duration-500"></div>
-        </Link>
+            <div className={`h-2 bg-${item.color}-500 w-0 group-hover:w-full transition-all duration-500`}></div>
+          </Link>
+        ))}
       </div>
 
-      {/* Admin Panel: Gestione Richieste */}
       {profile?.role === 'ADMIN' && (
-        <div className="w-full max-w-6xl space-y-6 animate-in fade-in duration-1000">
-          <div className="flex items-center justify-between px-4">
-            <div className="flex flex-col">
+        <div className="w-full max-w-6xl space-y-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+            <div>
               <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <ShieldCheck className="text-blue-600" /> Richieste in Sospeso
+                <ShieldCheck className="text-blue-600" /> Gestione Permessi
               </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Sincronizzazione manuale + Real-time attiva</p>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setShowAll(false)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${!showAll ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                  Da Approvare
+                </button>
+                <button onClick={() => setShowAll(true)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${showAll ? 'bg-slate-800 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                  Storico ({requests.length})
+                </button>
+              </div>
             </div>
-            <button 
-              onClick={fetchRequests} 
-              className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-2xl shadow-sm transition-all active:scale-90"
-              title="Aggiorna ora"
-            >
-              <RefreshCw size={20} className={loadingRequests ? 'animate-spin' : ''} />
-            </button>
+            
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input type="text" placeholder="Cerca..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-bold outline-none w-48 sm:w-64" />
+              </div>
+              <button onClick={fetchRequests} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 rounded-2xl transition-all active:scale-90 shadow-sm">
+                <RefreshCw size={18} className={loadingRequests ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
 
           {debugInfo && (
-            <div className="mx-4 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600">
-              <AlertTriangle size={20} />
-              <p className="text-xs font-bold uppercase tracking-tight">Errore Database: {debugInfo}</p>
+            <div className="p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 text-[10px] font-black uppercase mb-4 flex items-center gap-2">
+              <AlertTriangle size={14} /> {debugInfo}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pendingRequests.length > 0 ? (
-              pendingRequests.map((req) => (
-                <div key={req.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-lg hover:border-blue-200 transition-all group animate-in slide-in-from-bottom-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-                      <Users size={24} />
-                    </div>
-                    <span className="text-[10px] font-black px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full uppercase tracking-widest">
-                      Nuova
+            {filteredRequests.map((req) => (
+              <div key={req.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-lg hover:border-blue-200 transition-all group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`w-12 h-12 ${!req.profiles ? 'bg-red-50 text-red-400' : 'bg-slate-50 text-slate-400'} rounded-2xl flex items-center justify-center`}>
+                    {!req.profiles ? <MailQuestion size={24} /> : <Users size={24} />}
+                  </div>
+                  <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
+                    req.stato === 'RICHIESTO' ? 'bg-yellow-100 text-yellow-700' : 
+                    req.stato === 'AUTORIZZATO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {req.stato}
+                  </span>
+                </div>
+                
+                <div className="mb-6">
+                  {req.profiles ? (
+                    <>
+                      <p className="text-sm font-black text-slate-900 uppercase truncate">{req.profiles.username}</p>
+                      <p className="text-[10px] text-slate-400 font-bold mb-3 truncate">{req.profiles.email}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-black text-red-600 uppercase">Profilo non leggibile</p>
+                      <p className="text-[9px] text-slate-400 font-bold mb-3 truncate">ID: {req.user_id}</p>
+                    </>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Richiesta per:</span>
+                    <span className={`px-2 py-0.5 text-white text-[9px] font-black rounded uppercase ${
+                      req.sezione === 'LAVORO' ? 'bg-yellow-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-green-600'
+                    }`}>
+                      {req.sezione}
                     </span>
                   </div>
-                  
-                  <div className="mb-6">
-                    <p className="text-sm font-black text-slate-900 uppercase truncate">
-                      {req.profiles?.username || 'Utente (ID: ' + req.user_id.substring(0,5) + '...)'}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold mb-3 truncate">{req.profiles?.email || 'Profilo non trovato'}</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase">Sezione:</span>
-                      <span className={`px-2 py-0.5 text-white text-[9px] font-black rounded uppercase ${
-                        req.sezione === 'LAVORO' ? 'bg-yellow-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-green-600'
-                      }`}>
-                        {req.sezione}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleUpdatePermission(req.id, 'AUTORIZZATO')}
-                      className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-blue-700 shadow-md active:scale-95 transition-all"
-                    >
-                      <Check size={14} /> Abilita
-                    </button>
-                    <button 
-                      onClick={() => handleUpdatePermission(req.id, 'NEGATO')}
-                      className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-500 active:scale-95 transition-all"
-                    >
-                      <X size={14} /> Nega
-                    </button>
-                  </div>
                 </div>
-              ))
-            ) : (
-              <div className="col-span-full py-16 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
+
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpdatePermission(req.id, 'AUTORIZZATO')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 ${req.stato === 'AUTORIZZATO' ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                    <Check size={14} /> {req.stato === 'AUTORIZZATO' ? 'Autorizzato' : 'Abilita'}
+                  </button>
+                  <button onClick={() => handleUpdatePermission(req.id, 'NEGATO')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all active:scale-95 ${req.stato === 'NEGATO' ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-100 text-slate-400 hover:text-red-500 hover:border-red-100'}`}>
+                    <X size={14} /> Nega
+                  </button>
+                </div>
+              </div>
+            ))}
+            {filteredRequests.length === 0 && (
+              <div className="col-span-full py-20 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
                 <ShieldCheck size={48} className="opacity-10 mb-4" />
-                <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta</p>
-                <p className="text-[10px] mt-1 italic">I permessi sono tutti aggiornati.</p>
+                <p className="text-sm font-bold uppercase tracking-widest">Nessuna richiesta da gestire</p>
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {profile?.role === 'ADMIN' && (
-        <div className="mt-12 flex items-center gap-3 px-8 py-4 bg-blue-50 border-2 border-blue-200 rounded-full text-blue-700 shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center">
-            <ShieldCheck size={20} />
-          </div>
-          <span className="text-sm font-black uppercase tracking-widest">Admin Mode: {profile.username}</span>
         </div>
       )}
     </div>
