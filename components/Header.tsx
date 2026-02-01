@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Trophy, Briefcase, User, LogOut, Shield, UserCheck, Loader2, LogIn } from 'lucide-react';
+import { Home, Trophy, Briefcase, User, LogOut, Shield, UserCheck, Loader2, LogIn, ChevronRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -23,7 +23,7 @@ const Header: React.FC<Props> = ({ profile, session }) => {
   const handleLogout = () => supabase.auth.signOut();
 
   return (
-    <header className={`${getThemeColor()} text-white shadow-xl p-4 transition-colors duration-500 sticky top-0 z-50 border-b border-white/10`}>
+    <header className={`${getThemeColor()} text-white shadow-xl p-4 transition-colors duration-500 sticky top-0 z-50 border-b border-white/10 backdrop-blur-md`}>
       <div className="container mx-auto flex justify-between items-center px-2">
         <Link to="/" className="text-xl font-bold flex items-center gap-2 group">
           <div className="p-2 bg-white/10 rounded-xl group-hover:bg-white/20 transition-all group-hover:scale-110">
@@ -72,8 +72,10 @@ const Header: React.FC<Props> = ({ profile, session }) => {
               </div>
             </div>
           ) : (
-            <Link to="/login" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest">
-              <LogIn size={14} /> Accedi
+            <Link to="/login" className="flex items-center gap-3 bg-white text-slate-900 hover:bg-blue-50 px-5 py-2.5 rounded-2xl transition-all font-black text-[10px] uppercase tracking-[0.1em] shadow-lg shadow-black/20 group active:scale-95">
+              <LogIn size={14} className="group-hover:rotate-12 transition-transform" /> 
+              <span>Area Riservata</span>
+              <ChevronRight size={12} className="opacity-40" />
             </Link>
           )}
         </nav>

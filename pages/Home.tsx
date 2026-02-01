@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion, Zap, ChevronRight, Activity, Home as HomeIcon } from 'lucide-react';
+import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion, Zap, ChevronRight, Activity, Home as HomeIcon, Lock, Globe } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -72,6 +72,8 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
     r.sezione.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const isGuest = !session;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 overflow-x-hidden">
       {/* Hero Section */}
@@ -80,12 +82,22 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
         <div className="relative z-10 max-w-6xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full border border-blue-500/20 text-[10px] font-black uppercase tracking-[0.2em] mb-8 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
-            <HomeIcon size={12} /> Home Page
+            <HomeIcon size={12} /> Personal Portal v3.0
           </div>
           <h1 className="text-3xl sm:text-5xl md:text-7xl lg:text-9xl font-black uppercase tracking-tighter italic mb-4 leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 whitespace-nowrap">
             ANDREA <span className="text-blue-500">SPAGGIARI</span>
           </h1>
-          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">Sito Personale di Andrea - in continuo aggiornamento...</p>
+          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">Web Developer • Sport Manager • Industrial Expert</p>
+          
+          {isGuest && (
+            <div className="mt-12 max-w-lg mx-auto bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Benvenuto Visitatore</p>
+              <p className="text-slate-300 text-xs font-medium leading-relaxed uppercase">
+                Puoi consultare liberamente la sezione <span className="text-white font-black underline decoration-blue-500 underline-offset-4">Pallamano</span>. 
+                Le aree professionali e private sono protette da sistemi di sicurezza crittografati.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -93,17 +105,36 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         {/* Navigation Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
           {[
-            { to: "/pallamano", color: "blue", icon: Trophy, label: "PALLAMANO", desc: "Pallamano Vigevano U14M", num: "01" },
-            { to: "/lavoro", color: "amber", icon: Briefcase, label: "LAVORO", desc: "Produzione & KME", num: "02" },
-            { to: "/personale", color: "emerald", icon: User, label: "PERSONALE", desc: "Archivio Privato", num: "03" }
+            { to: "/pallamano", color: "blue", icon: Trophy, label: "PALLAMANO", desc: "Classifiche & Rosa U14M", num: "01", public: true },
+            { to: "/lavoro", color: "amber", icon: Briefcase, label: "LAVORO", desc: "KME Hub & Produzione", num: "02", public: false },
+            { to: "/personale", color: "emerald", icon: User, label: "PERSONALE", desc: "Archivio Appunti Privati", num: "03", public: false }
           ].map((item, i) => (
             <Link key={i} to={item.to} className="group relative bg-slate-900/80 backdrop-blur-xl rounded-[3rem] p-10 border border-white/5 shadow-2xl transition-all duration-500 hover:scale-[1.02] hover:bg-slate-800 overflow-hidden">
+              {/* Badge Pubblico/Privato */}
+              <div className="absolute top-8 left-10 z-30">
+                {item.public ? (
+                  <div className="flex items-center gap-1.5 bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg border border-blue-500/30 text-[8px] font-black uppercase tracking-widest shadow-lg">
+                    <Globe size={10} /> Free Access
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-white/5 text-[8px] font-black uppercase tracking-widest">
+                    <Lock size={10} /> Private Area
+                  </div>
+                )}
+              </div>
+
               <div className="absolute top-6 right-10 text-7xl font-black text-white/[0.03] group-hover:text-white/[0.07] transition-colors">{item.num}</div>
-              <div className={`w-16 h-16 bg-slate-800 rounded-[1.5rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-${item.color}-600 transition-all`}>
+              <div className={`w-16 h-16 bg-slate-800 rounded-[1.5rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-${item.color}-600 transition-all mt-6`}>
                 <item.icon size={28} className={`text-slate-400 group-hover:text-white transition-colors`} />
               </div>
               <h2 className="text-3xl font-black text-white mb-2 uppercase italic tracking-tighter leading-none">{item.label}</h2>
               <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">{item.desc}</p>
+              
+              <div className="mt-8 flex items-center gap-2 text-slate-500 group-hover:text-white transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest">Esplora</span>
+                <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </div>
+
               <div className={`absolute bottom-0 left-0 h-1 bg-${item.color}-500 w-full opacity-0 group-hover:opacity-100 transition-opacity duration-700`}></div>
             </Link>
           ))}
