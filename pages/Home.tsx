@@ -82,12 +82,12 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
         <div className="relative z-10 max-w-6xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full border border-blue-500/20 text-[10px] font-black uppercase tracking-[0.2em] mb-8 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
-            <HomeIcon size={12} /> Personal Portal v3.0
+            <HomeIcon size={12} /> Andrea v3.0
           </div>
           <h1 className="text-3xl sm:text-5xl md:text-7xl lg:text-9xl font-black uppercase tracking-tighter italic mb-4 leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 whitespace-nowrap">
             ANDREA <span className="text-blue-500">SPAGGIARI</span>
           </h1>
-          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">Web Developer • Sport Manager • Industrial Expert</p>
+          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">Sito personale - In continuo aggiornamento</p>
           
           {isGuest && (
             <div className="mt-12 max-w-lg mx-auto bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
