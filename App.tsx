@@ -1,17 +1,17 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
-import Home from './pages/Home';
-import Pallamano from './pages/Pallamano';
-import Lavoro from './pages/Lavoro';
-import Produzione from './pages/Produzione';
-import Personale from './pages/Personale';
-import Login from './pages/Login';
-import Header from './components/Header';
-import Footer from './components/Footer';
-import ProtectedRoute from './components/ProtectedRoute';
-import { UserProfile } from './types';
+import { supabase } from './supabaseClient.ts';
+import Home from './pages/Home.tsx';
+import Pallamano from './pages/Pallamano.tsx';
+import Lavoro from './pages/Lavoro.tsx';
+import Produzione from './pages/Produzione.tsx';
+import Personale from './pages/Personale.tsx';
+import Login from './pages/Login.tsx';
+import Header from './components/Header.tsx';
+import Footer from './components/Footer.tsx';
+import ProtectedRoute from './components/ProtectedRoute.tsx';
+import { UserProfile } from './types.ts';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -95,13 +95,10 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
           
-          {/* HOME PAGE PUBBLICA */}
           <Route path="/" element={<Home profile={profile} session={session} onRefresh={refreshProfile} />} />
           
-          {/* SEZIONE PALLAMANO PUBBLICA */}
           <Route path="/pallamano" element={<Pallamano profile={profile} />} />
           
-          {/* SEZIONI PROTETTE */}
           <Route path="/lavoro" element={
             <ProtectedRoute session={session} section="LAVORO" profile={profile}>
               <Lavoro />

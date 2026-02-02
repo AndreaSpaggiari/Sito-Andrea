@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion, Zap, ChevronRight, Activity, Home as HomeIcon, Lock, Globe } from 'lucide-react';
-import { supabase } from '../supabaseClient';
-import { UserProfile } from '../types';
+import { supabase } from '../supabaseClient.ts';
+import { UserProfile } from '../types.ts';
 
 interface PendingRequest {
   id: string;
@@ -76,7 +76,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 overflow-x-hidden">
-      {/* Hero Section */}
       <div className="bg-slate-900 pt-24 pb-32 px-6 text-center relative overflow-hidden border-b border-white/5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950"></div>
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
@@ -102,7 +101,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 -mt-16 relative z-20">
-        {/* Navigation Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
           {[
             { to: "/pallamano", color: "blue", icon: Trophy, label: "PALLAMANO", desc: "Classifiche & Rosa U14M", num: "01", public: true },
@@ -110,7 +108,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
             { to: "/personale", color: "emerald", icon: User, label: "PERSONALE", desc: "Archivio Appunti Privati", num: "03", public: false }
           ].map((item, i) => (
             <Link key={i} to={item.to} className="group relative bg-slate-900/80 backdrop-blur-xl rounded-[3rem] p-10 border border-white/5 shadow-2xl transition-all duration-500 hover:scale-[1.02] hover:bg-slate-800 overflow-hidden">
-              {/* Badge Pubblico/Privato */}
               <div className="absolute top-8 left-10 z-30">
                 {item.public ? (
                   <div className="flex items-center gap-1.5 bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg border border-blue-500/30 text-[8px] font-black uppercase tracking-widest shadow-lg">
@@ -140,7 +137,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
           ))}
         </div>
 
-        {/* Admin Console */}
         {profile?.role === 'ADMIN' && (
           <div className="bg-slate-900/40 backdrop-blur-sm rounded-[3rem] border border-white/5 p-8 md:p-12 shadow-2xl">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">

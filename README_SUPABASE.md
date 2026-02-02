@@ -1,32 +1,32 @@
 
-# 🛠️ FIX DEFINITIVO CHAT SUPABASE
+# 🚀 FIX PERSISTENZA CHAT
 
-Se la chat non invia messaggi, incolla ed esegui questo script nel SQL Editor di Supabase.
+Esegui questo script nel SQL Editor di Supabase per sbloccare il database per la chat.
 
 ```sql
--- 1. SBLOCCA TABELLA MESSAGGI PER TUTTI (ANONIMI E AUTENTICATI)
+-- 1. CREA LA TABELLA SE NON ESISTE (O AGGIORNA)
+CREATE TABLE IF NOT EXISTS public.messages (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    sender_name TEXT NOT NULL,
+    recipient_name TEXT DEFAULT 'ALL',
+    content TEXT NOT NULL
+);
+
+-- 2. ABILITA SICUREZZA
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
--- Cancella vecchie policy se esistono
-DROP POLICY IF EXISTS "Anyone can read messages" ON public.messages;
-DROP POLICY IF EXISTS "Anyone can insert messages" ON public.messages;
-
--- Crea nuove policy aperte
-CREATE POLICY "Anyone can read messages" ON public.messages 
+-- 3. PERMESSI DI LETTURA (TUTTI)
+DROP POLICY IF EXISTS "Anyone can read" ON public.messages;
+CREATE POLICY "Anyone can read" ON public.messages 
 FOR SELECT USING (true);
 
-CREATE POLICY "Anyone can insert messages" ON public.messages 
+-- 4. PERMESSI DI SCRITTURA (TUTTI)
+DROP POLICY IF EXISTS "Anyone can insert" ON public.messages;
+CREATE POLICY "Anyone can insert" ON public.messages 
 FOR INSERT WITH CHECK (true);
 
--- 2. ABILITA IL REALTIME (IMPORTANTE PER VEDERE I MESSAGGI SUBITO)
--- Controlla se la pubblicazione esiste, altrimenti creala
-DO $$ 
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
-    CREATE PUBLICATION supabase_realtime;
-  END IF;
-END $$;
-
--- Aggiungi la tabella messages alla pubblicazione realtime
+-- 5. ABILITA REALTIME
+-- Nota: Assicurati di aver attivato 'messages' nella dashboard Supabase -> Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
 ```

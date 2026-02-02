@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { ChatMessage, OnlineUser } from '../types';
-import { Send, Users, LogOut, UserCircle, MessageSquare, ChevronRight, AlertCircle, RefreshCw, Zap, ZapOff } from 'lucide-react';
+import { Send, LogOut, UserCircle, MessageSquare, Zap, ZapOff, Clock, Radio, Database } from 'lucide-react';
 
 const Chat: React.FC = () => {
   const [username, setUsername] = useState<string>(localStorage.getItem('chat_username') || '');
@@ -13,7 +13,7 @@ const Chat: React.FC = () => {
   const [recipient, setRecipient] = useState<string>('ALL');
   const [isSending, setIsSending] = useState(false);
   const [isLive, setIsLive] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'syncing'>('syncing');
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
@@ -34,36 +34,45 @@ const Chat: React.FC = () => {
   useEffect(() => {
     if (!username) return;
 
-    // Carica messaggi recenti (ultime 24 ore)
-    const loadHistory = async () => {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .gt('created_at', yesterday)
-        .order('created_at', { ascending: true });
-      if (data) setMessages(data);
+    // 1. CARICAMENTO STORICO DI OGGI (Dalle 00:00)
+    const loadDailyHistory = async () => {
+      setDbStatus('syncing');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .gte('created_at', today.toISOString())
+          .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        if (data) setMessages(data);
+        setDbStatus('connected');
+      } catch (e) {
+        console.warn("Errore recupero storico:", e);
+        setDbStatus('error');
+      }
     };
-    loadHistory();
+    loadDailyHistory();
 
-    // Inizializza Canale BROADCAST (Bypass Database)
-    const channel = supabase.channel('room-1', {
+    // 2. CONNESSIONE CANALE REALTIME
+    const channel = supabase.channel('chat-main-v4', {
       config: {
-        broadcast: { self: true },
+        broadcast: { self: false },
         presence: { key: username },
       },
     });
 
     channel
-      .on('broadcast', { event: 'shout' }, (payload) => {
+      .on('broadcast', { event: 'message' }, (payload) => {
         const msg = payload.payload as ChatMessage;
-        // Filtra per destinatario
-        if (msg.recipient_name === 'ALL' || msg.recipient_name === username || msg.sender_name === username) {
-          setMessages((prev) => {
-            if (prev.some(m => m.id === msg.id && msg.id)) return prev;
-            return [...prev, msg];
-          });
-        }
+        // Evita duplicati se il messaggio è già arrivato via DB (raro in tempo reale)
+        setMessages((prev) => {
+          if (prev.some(m => m.created_at === msg.created_at && m.sender_name === msg.sender_name)) return prev;
+          return [...prev, msg];
+        });
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
@@ -94,9 +103,6 @@ const Chat: React.FC = () => {
     const content = message.trim();
     if (!content || !channelRef.current) return;
 
-    setIsSending(true);
-    setError(null);
-
     const msgPayload: ChatMessage = {
       sender_name: username,
       recipient_name: recipient,
@@ -104,27 +110,34 @@ const Chat: React.FC = () => {
       created_at: new Date().toISOString(),
     };
 
+    // LOCAL ECHO: Visualizza subito il tuo messaggio
+    setMessages(prev => [...prev, msgPayload]);
+    setMessage('');
+    setIsSending(true);
+
     try {
-      // 1. Invia via BROADCAST (Istantaneo, non serve DB)
-      await channelRef.current.send({
+      // A. VIA RADIO (Broadcast) - Istantaneo per chi è online
+      channelRef.current.send({
         type: 'broadcast',
-        event: 'shout',
+        event: 'message',
         payload: msgPayload,
       });
 
-      setMessage('');
+      // B. VIA DATABASE (Persistenza) - Per chi entrerà dopo o per il refresh
+      const { error } = await supabase.from('messages').insert([{ 
+        sender_name: username, 
+        recipient_name: recipient, 
+        content: content 
+      }]);
 
-      // 2. Prova a salvare nel DATABASE (per lo storico)
-      // Se fallisce, non importa, il messaggio è già stato visto via broadcast
-      supabase.from('messages').insert([
-        { sender_name: username, recipient_name: recipient, content: content }
-      ]).then(({ error }) => {
-        if (error) console.warn("Salvataggio storico fallito, ma broadcast riuscito:", error.message);
-      });
-
-    } catch (err: any) {
-      setError("ERRORE INVIO");
-      console.error(err);
+      if (error) {
+        console.warn("DB offline, messaggio salvato solo in sessione.");
+        setDbStatus('error');
+      } else {
+        setDbStatus('connected');
+      }
+    } catch (err) {
+      console.error("Errore invio:", err);
     } finally {
       setIsSending(false);
     }
@@ -132,12 +145,12 @@ const Chat: React.FC = () => {
 
   if (!username) {
     return (
-      <div className="bg-white rounded-3xl shadow-2xl p-8 border border-slate-200">
+      <div className="bg-white rounded-[2rem] shadow-2xl p-8 border border-slate-200 animate-in fade-in zoom-in duration-300">
         <div className="text-center">
           <div className="w-16 h-16 bg-yellow-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg text-slate-900">
             <UserCircle size={32} />
           </div>
-          <h2 className="text-xl font-black uppercase italic mb-6">Chat Rapida</h2>
+          <h2 className="text-xl font-black uppercase italic mb-6">Identificati</h2>
           <form onSubmit={(e) => {
             e.preventDefault();
             if (inputName.trim()) {
@@ -150,10 +163,11 @@ const Chat: React.FC = () => {
               type="text" 
               value={inputName} 
               onChange={e => setInputName(e.target.value)}
-              placeholder="NOME..."
-              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-center uppercase outline-none focus:border-yellow-400"
+              placeholder="IL TUO NOME..."
+              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-center uppercase outline-none focus:border-yellow-400"
+              required
             />
-            <button className="w-full py-4 bg-slate-900 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg">Entra</button>
+            <button className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl uppercase text-xs tracking-widest shadow-xl active:scale-95">Accedi</button>
           </form>
         </div>
       </div>
@@ -161,34 +175,36 @@ const Chat: React.FC = () => {
   }
 
   return (
-    <div className="bg-white rounded-3xl shadow-2xl flex flex-col h-[600px] border-2 border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-[2rem] shadow-2xl flex flex-col h-[600px] border-2 border-slate-100 overflow-hidden relative">
       {/* Header */}
-      <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+      <div className="bg-slate-900 p-4 text-white flex justify-between items-center z-10 shrink-0">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-slate-900">
-              <MessageSquare size={16} />
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-lg ${isLive ? 'bg-yellow-400 text-slate-900' : 'bg-slate-800 text-slate-500'}`}>
+              <Radio size={18} className={isLive ? 'animate-pulse' : ''} />
             </div>
-            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-900 ${isLive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${isLive ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-red-500'}`}></div>
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-tighter leading-none">{username}</p>
-            <p className="text-[8px] font-bold text-slate-400 uppercase mt-1 flex items-center gap-1">
-              {isLive ? <Zap size={8} className="text-yellow-400" /> : <ZapOff size={8} />}
-              {onlineUsers.length} ONLINE
-            </p>
+            <p className="text-[11px] font-black uppercase tracking-tighter leading-none italic">{username}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-[8px] font-bold text-slate-400 uppercase leading-none">{onlineUsers.length} ONLINE</p>
+              <div className={`flex items-center gap-0.5 text-[7px] font-black uppercase ${dbStatus === 'connected' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                <Database size={8} /> {dbStatus === 'connected' ? 'Salvato' : 'Solo Live'}
+              </div>
+            </div>
           </div>
         </div>
-        <button onClick={() => { setUsername(''); localStorage.removeItem('chat_username'); }} className="text-slate-500 hover:text-white transition-colors">
+        <button onClick={() => { setUsername(''); localStorage.removeItem('chat_username'); }} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-slate-500 hover:text-white transition-colors">
           <LogOut size={16} />
         </button>
       </div>
 
-      {/* Area Messaggi */}
-      <div className="flex-grow flex flex-col min-w-0 bg-slate-50">
-        <div className="bg-white/80 px-4 py-1.5 border-b border-slate-100 flex justify-between items-center">
-          <span className="text-[9px] font-black text-slate-400 uppercase">A: <span className="text-slate-900">{recipient}</span></span>
-          {error && <span className="text-[8px] font-black text-red-500 uppercase">{error}</span>}
+      {/* Messaggi */}
+      <div className="flex-grow flex flex-col min-w-0 bg-slate-50 relative overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-md px-4 py-2 border-b border-slate-100 flex justify-between items-center z-10">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">A: <span className="text-slate-900">{recipient}</span></span>
+          <span className="text-[8px] font-black text-slate-300 uppercase italic">Storico di Oggi</span>
         </div>
 
         <div ref={scrollContainerRef} className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar">
@@ -197,14 +213,14 @@ const Chat: React.FC = () => {
             const isPriv = msg.recipient_name !== 'ALL';
             return (
               <div key={i} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-1`}>
-                <span className="text-[8px] font-black text-slate-400 mb-1 uppercase px-1">{msg.sender_name} {isPriv && '• PRIVATO'}</span>
-                <div className={`px-4 py-2.5 rounded-2xl text-[13px] max-w-[85%] shadow-sm ${
+                <span className="text-[8px] font-black text-slate-400 mb-1 px-1 uppercase">{isMe ? 'TU' : msg.sender_name}</span>
+                <div className={`px-4 py-3 rounded-2xl text-[13px] max-w-[85%] shadow-sm relative ${
                   isMe ? 'bg-slate-900 text-white rounded-tr-none' : 
-                  isPriv ? 'bg-yellow-400 text-slate-900 rounded-tl-none border border-yellow-500' : 
+                  isPriv ? 'bg-yellow-400 text-slate-900 rounded-tl-none border-b-2 border-yellow-500' : 
                   'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                 }`}>
                   <p className="leading-tight font-medium">{msg.content}</p>
-                  <span className="text-[7px] mt-1 block opacity-40 text-right uppercase">
+                  <span className="text-[7px] mt-1.5 block opacity-40 text-right font-black uppercase">
                     {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'LIVE'}
                   </span>
                 </div>
@@ -214,34 +230,33 @@ const Chat: React.FC = () => {
         </div>
 
         {/* Canali Rapidi */}
-        <div className="px-4 py-2 bg-white border-t border-slate-100 flex gap-2 overflow-x-auto no-scrollbar">
-          <button onClick={() => setRecipient('ALL')} className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all whitespace-nowrap ${recipient === 'ALL' ? 'bg-yellow-400 text-slate-900' : 'bg-slate-100 text-slate-400'}`}>Tutti</button>
+        <div className="px-4 py-2 bg-white border-t border-slate-100 flex gap-2 overflow-x-auto no-scrollbar shrink-0">
+          <button onClick={() => setRecipient('ALL')} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all whitespace-nowrap border ${recipient === 'ALL' ? 'bg-yellow-400 border-yellow-500 text-slate-900 scale-105 shadow-md' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>Tutti</button>
           {onlineUsers.filter(u => u.username !== username).map((u, i) => (
-            <button key={i} onClick={() => setRecipient(u.username)} className={`px-3 py-1 rounded-full text-[8px] font-black uppercase transition-all whitespace-nowrap ${recipient === u.username ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}>{u.username}</button>
+            <button key={i} onClick={() => setRecipient(u.username)} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all whitespace-nowrap border ${recipient === u.username ? 'bg-slate-900 border-black text-white scale-105 shadow-md' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>{u.username}</button>
           ))}
         </div>
 
         {/* Input */}
-        <div className="p-3 bg-white border-t border-slate-100">
+        <div className="p-4 bg-white border-t border-slate-100 shrink-0">
           <form onSubmit={sendMessage} className="flex gap-2">
             <input
               type="text"
               value={message}
               onChange={e => setMessage(e.target.value)}
-              disabled={isSending}
               placeholder="SCRIVI..."
-              className="flex-grow px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-yellow-400"
+              className="flex-grow px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-[12px] font-black uppercase outline-none focus:border-yellow-400 shadow-inner"
             />
-            <button disabled={!message.trim()} className="w-12 h-12 bg-yellow-400 text-slate-900 rounded-xl flex items-center justify-center shadow-lg active:scale-90 disabled:opacity-50">
-              <Send size={18} />
+            <button disabled={!message.trim()} className="w-14 h-14 bg-yellow-400 text-slate-900 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 disabled:opacity-50 transition-all">
+              <Send size={20} />
             </button>
           </form>
         </div>
       </div>
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
