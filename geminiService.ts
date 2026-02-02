@@ -5,7 +5,7 @@
  */
 export const processLabelImage = async (base64Image: string) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // Timeout di 15 secondi
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // Aumentato a 30 secondi per il modello Pro
 
   try {
     const response = await fetch('/api/analyze', {
@@ -20,16 +20,24 @@ export const processLabelImage = async (base64Image: string) => {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Errore server: ${response.status}`);
+      let errorMsg = `Errore server: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // Se non è JSON, leggi come testo per il log
+        const text = await response.text();
+        console.error("Risposta non JSON dal server:", text);
+      }
+      throw new Error(errorMsg);
     }
 
     return await response.json();
   } catch (error: any) {
     clearTimeout(timeoutId);
-    console.error("Errore Chiamata Gemini:", error);
+    console.error("DEBUG Errore Chiamata AI:", error);
     if (error.name === 'AbortError') {
-      throw new Error("Il server ha impiegato troppo tempo. Riprova.");
+      throw new Error("Il server ha impiegato troppo tempo (Timeout 30s). Riprova.");
     }
     throw new Error(error.message || "Impossibile contattare il server di analisi");
   }

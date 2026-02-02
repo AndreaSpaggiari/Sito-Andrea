@@ -14,13 +14,15 @@ export default async function handler(req: any, res: any) {
 
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Configurazione server errata' });
+    return res.status(500).json({ error: 'Configurazione server errata: API_KEY mancante' });
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
+    
+    // Usiamo Gemini 3 Pro per la massima precisione richiesta dall'utente
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: {
         parts: [
           {
@@ -30,34 +32,36 @@ export default async function handler(req: any, res: any) {
             }
           },
           {
-            text: `Analizza questa etichetta tecnica KME. 
-              Estrai i dati seguendo RIGOROSAMENTE queste istruzioni:
-              
-              1. SCHEDA: Il numero dopo 'SCHEDA' o 'ORDER N.'.
-              2. CLIENTE: Ragione sociale completa.
-              3. PESO TEORICO (ordine_kg_lavorato): È il numero situato FISICAMENTE SOPRA il peso ordinato nel blocco quantità.
-              4. PESO ORDINATO (ordine_kg_richiesto): È il numero situato SOTTO il peso teorico.
-              5. MISURA: La larghezza nominale.
-              6. SPESSORE: Es. 0.30, 0.45.
-              7. MCOIL: Il codice della bobina di partenza (es. MC...).
+            text: `Agisci come un esperto di data entry industriale KME. Analizza questa scheda tecnica di produzione.
+            ESTRAI I SEGUENTI DATI:
 
-              Restituisci questo JSON preciso:
-              {
-                "scheda": intero,
-                "cliente": "stringa",
-                "misura": decimale,
-                "ordine_kg_lavorato": intero,
-                "ordine_kg_richiesto": intero,
-                "data_consegna": "YYYY-MM-DD",
-                "mcoil": "stringa",
-                "mcoil_kg": intero,
-                "spessore": decimale,
-                "mcoil_larghezza": intero,
-                "mcoil_lega": "stringa",
-                "mcoil_stato_fisico": "stringa",
-                "conferma_voce": "stringa"
-              }
-              IMPORTANTE: Se un valore non è leggibile, usa null. Non aggiungere testo extra.`
+            1. SCHEDA: Il numero che segue "Scheda n°" nella parte superiore (es: 5926).
+            2. CLIENTE: Il nome della ditta che si trova sotto "Conferma-Voce". Solitamente preceduto da un codice numerico (es: da "03041690 - SIRIO ELETTRONICA SR" estrai "SIRIO ELETTRONICA SR").
+            3. MASTER COIL: Il codice sotto "Master Coil :" (es: EM020458).
+            4. PESO MC (Kg): Il valore sotto "Kg MC :" (es: 3.166).
+            5. SPESSORE MC: Il valore sotto "Spessore MC :" (es: 0.3).
+            6. LARGHEZZA MC: Il valore sotto "Larghezza MC :" (es: 1050).
+            7. LEGA: Il valore sotto "Lega :" (es: CUETP).
+            8. QTA ORDINATA KG (ordine_kg_richiesto): Il valore numerico dopo "Qtà Ordinata Kg :" (es: 400).
+            9. PESO TEORICO (ordine_kg_lavorato): Il valore posizionato sopra il peso finale.
+            10. MISURA (LARGHEZZA TAGLIO): Il valore numerico dopo "Largh. :" nella sezione dei dettagli di taglio (es: 40).
+            11. DATA CONSEGNA (D.Cli.): Estrai il valore sotto "D.Cli." (es: 06-02). 
+                CONVERSIONE DATA: Convertilo in YYYY-MM-DD usando l'anno 2026 se non diversamente specificato. Quindi 06-02 diventa 2026-02-06.
+
+            Restituisci ESCLUSIVAMENTE un JSON puro secondo questo schema:
+            {
+              "scheda": numero,
+              "cliente": "stringa",
+              "mcoil": "stringa",
+              "mcoil_kg": numero,
+              "spessore": numero,
+              "mcoil_larghezza": numero,
+              "mcoil_lega": "stringa",
+              "ordine_kg_richiesto": numero,
+              "ordine_kg_lavorato": numero,
+              "misura": numero,
+              "data_consegna": "YYYY-MM-DD"
+            }`
           }
         ]
       },
@@ -69,25 +73,26 @@ export default async function handler(req: any, res: any) {
           properties: {
             scheda: { type: Type.INTEGER, nullable: true },
             cliente: { type: Type.STRING, nullable: true },
-            misura: { type: Type.NUMBER, nullable: true },
-            ordine_kg_lavorato: { type: Type.INTEGER, nullable: true },
-            ordine_kg_richiesto: { type: Type.INTEGER, nullable: true },
-            data_consegna: { type: Type.STRING, nullable: true },
             mcoil: { type: Type.STRING, nullable: true },
-            mcoil_kg: { type: Type.INTEGER, nullable: true },
+            mcoil_kg: { type: Type.NUMBER, nullable: true },
             spessore: { type: Type.NUMBER, nullable: true },
             mcoil_larghezza: { type: Type.INTEGER, nullable: true },
             mcoil_lega: { type: Type.STRING, nullable: true },
-            mcoil_stato_fisico: { type: Type.STRING, nullable: true },
-            conferma_voce: { type: Type.STRING, nullable: true }
+            ordine_kg_richiesto: { type: Type.INTEGER, nullable: true },
+            ordine_kg_lavorato: { type: Type.INTEGER, nullable: true },
+            misura: { type: Type.NUMBER, nullable: true },
+            data_consegna: { type: Type.STRING, nullable: true }
           }
         }
       }
     });
 
-    res.status(200).json(JSON.parse(response.text.trim()));
+    const text = response.text;
+    if (!text) throw new Error("Risposta vuota dall'IA");
+    
+    res.status(200).json(JSON.parse(text.trim()));
   } catch (error: any) {
-    console.error("Errore API:", error);
-    res.status(500).json({ error: "Errore analisi IA." });
+    console.error("Errore API Analisi KME:", error);
+    res.status(500).json({ error: "Analisi fallita: " + error.message });
   }
 }
