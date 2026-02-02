@@ -13,8 +13,7 @@ import { processLabelImage } from '../geminiService';
 import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, Camera, Upload, Keyboard, CheckCircle2, PlayCircle, X, 
-  Settings, Calendar, Laptop, ClipboardList, Box, SortAsc, Hash, User, Clock, 
-  Ruler, ArrowRight, BarChart3, Filter, Scale, Activity, PieChart, ChevronDown, AlertTriangle
+  Laptop, ClipboardList, Box, Hash, User, Ruler, Activity, AlertTriangle, HardDrive, Scale
 } from 'lucide-react';
 
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
@@ -37,7 +36,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-const compressImage = (base64: string, maxWidth = 600, quality = 0.6): Promise<string> => {
+const compressImage = (base64: string, maxWidth = 1600, quality = 0.85): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = `data:image/jpeg;base64,${base64}`;
@@ -52,6 +51,11 @@ const compressImage = (base64: string, maxWidth = 600, quality = 0.6): Promise<s
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
+      // Migliora nitidezza
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+      }
       ctx?.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
     };
@@ -70,6 +74,7 @@ const Produzione: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('CARICAMENTO...');
   const [scanResult, setScanResult] = useState<any>(null);
+  const [isManualEntry, setIsManualEntry] = useState(false);
   const [showMacchinaPicker, setShowMacchinaPicker] = useState(!selectedMacchina);
   const [showFasePicker, setShowFasePicker] = useState<{ id: string } | null>(null);
   const [showTerminaPicker, setShowTerminaPicker] = useState<Lavorazione | null>(null);
@@ -105,24 +110,36 @@ const Produzione: React.FC = () => {
 
   useEffect(() => { fetchLavorazioni(); }, [fetchLavorazioni]);
 
+  const triggerManualEntry = () => {
+    setIsManualEntry(true);
+    setScanResult({ 
+      scheda: '', cliente: '', misura: '', ordine_kg_richiesto: '', ordine_kg_lavorato: '', data_consegna: formatDate(new Date()),
+      mcoil: '', mcoil_kg: '', spessore: '', mcoil_larghezza: '', mcoil_lega: 'RAME', mcoil_stato_fisico: 'N/D', conferma_voce: ''
+    });
+    setShowScanOptions(false);
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setLoading(true);
-    setLoadingMsg('PREPARAZIONE FOTO...');
+    setLoadingMsg('OTTIMIZZAZIONE HD...');
     setShowScanOptions(false);
     
     try {
       const base64Raw = await blobToBase64(file);
       const compressedBase64 = await compressImage(base64Raw);
       
-      setLoadingMsg('ANALISI IA IN CORSO...');
+      setLoadingMsg('ANALISI IA DETTAGLIATA...');
       const data = await processLabelImage(compressedBase64);
+      
+      const hasData = data.scheda || data.cliente;
       setScanResult(data);
+      setIsManualEntry(!hasData);
     } catch (err: any) {
       console.error("Errore Scan:", err);
-      alert(err.message || "Errore. Usa l'inserimento manuale se il problema persiste.");
+      triggerManualEntry();
     } finally {
       setLoading(false);
     }
@@ -130,11 +147,18 @@ const Produzione: React.FC = () => {
 
   const handleInviaScheda = async () => {
     if (!scanResult || !selectedMacchina) return;
+    
+    if (!scanResult.scheda || !scanResult.cliente) {
+      alert("Scheda e Cliente sono obbligatori.");
+      return;
+    }
+
     setLoading(true);
     setLoadingMsg('SALVATAGGIO...');
     try {
       const nomeCliente = (scanResult.cliente || 'CLIENTE IGNOTO').toUpperCase().trim();
       const safeClientId = nomeCliente.replace(/[^A-Z0-9]/g, '_').substring(0, 30);
+      
       await supabase.from('l_clienti').upsert({ id_cliente: safeClientId, cliente: nomeCliente }, { onConflict: 'id_cliente' });
 
       const payload = {
@@ -144,6 +168,7 @@ const Produzione: React.FC = () => {
         scheda: parseInt(scanResult.scheda) || 0,
         id_cliente: safeClientId,
         ordine_kg_richiesto: parseInt(scanResult.ordine_kg_richiesto) || 0,
+        ordine_kg_lavorato: parseInt(scanResult.ordine_kg_lavorato) || 0,
         misura: parseFloat(scanResult.misura) || 0,
         attesa_lavorazione: new Date().toISOString(),
         data_consegna: scanResult.data_consegna || null,
@@ -152,13 +177,17 @@ const Produzione: React.FC = () => {
         spessore: parseFloat(scanResult.spessore) || 0,
         mcoil_larghezza: parseInt(scanResult.mcoil_larghezza) || 0,
         mcoil_lega: (scanResult.mcoil_lega || 'RAME').toUpperCase(),
+        mcoil_stato_fisico: (scanResult.mcoil_stato_fisico || 'N/D').toUpperCase(),
+        conferma_voce: (scanResult.conferma_voce || 'N/D').toUpperCase()
       };
 
       const { error } = await supabase.from('l_lavorazioni').insert(payload);
       if (error) throw error;
       setScanResult(null);
+      setIsManualEntry(false);
       await fetchLavorazioni(false);
     } catch (err: any) {
+      console.error("Errore Salvataggio:", err);
       alert(`Errore: ${err.message}`);
     } finally {
       setLoading(false);
@@ -178,7 +207,7 @@ const Produzione: React.FC = () => {
     setLoading(false);
   };
 
-  const finishLavorazione = async (l: Lavorazione, kg: number, nastri: number, pezzi: number, metri: number, nextMachineId?: string) => {
+  const finishLavorazione = async (l: Lavorazione, kg: number, nastri: number, pezzi: number, metri: number) => {
     setLoading(true);
     setLoadingMsg('ARCHIVIAZIONE...');
     try {
@@ -294,7 +323,7 @@ const Produzione: React.FC = () => {
               </div>
             </div>
           </div>
-          <div className="w-full lg:w-80 shrink-0 h-fit lg:sticky lg:top-24"><Chat /></div>
+          <div className="w-full lg:w-96 shrink-0 h-fit lg:sticky lg:top-24"><Chat /></div>
         </div>
 
         <button onClick={() => setShowScanOptions(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-2xl border-2 border-white active:scale-110 z-40"><Camera size={24} /></button>
@@ -304,11 +333,11 @@ const Produzione: React.FC = () => {
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
             <div className="bg-white rounded-3xl p-8 w-full max-w-xs shadow-2xl relative border-t-4 border-yellow-500">
               <button onClick={() => setShowScanOptions(false)} className="absolute top-5 right-5 text-gray-300"><X size={22} /></button>
-              <h3 className="text-sm font-black text-slate-900 mb-8 text-center uppercase tracking-widest">Inserimento Scheda</h3>
+              <h3 className="text-sm font-black text-slate-900 mb-8 text-center uppercase tracking-widest">Nuova Scheda</h3>
               <div className="flex flex-col gap-3">
-                <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-4 bg-slate-900 text-white p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95"><Camera size={18} /> SCATTA FOTO</button>
+                <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-4 bg-slate-900 text-white p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95"><Camera size={18} /> SCATTA FOTO HD</button>
                 <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-4 bg-gray-100 text-slate-700 p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95"><Upload size={18} /> GALLERIA</button>
-                <button onClick={() => { setScanResult({ scheda: '', cliente: '', misura: '', ordine_kg_richiesto: '', data_consegna: formatDate(new Date()) }); setShowScanOptions(false); }} className="flex items-center gap-4 bg-yellow-50 text-yellow-800 p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95 border border-yellow-200"><Keyboard size={18} /> INSERISCI A MANO</button>
+                <button onClick={triggerManualEntry} className="flex items-center gap-4 bg-yellow-50 text-yellow-800 p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95 border border-yellow-200"><Keyboard size={18} /> MANUALE</button>
               </div>
               <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
               <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -316,58 +345,128 @@ const Produzione: React.FC = () => {
           </div>
         )}
 
-        {/* Modal Modifica/Salvataggio */}
+        {/* Modal Riepilogo AGGIORNATO CON PESO TEORICO E DESIGN COMPATTO */}
         {scanResult && (
-          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-[110] overflow-y-auto">
-            <div className="bg-white rounded-[2rem] p-6 w-full max-w-lg shadow-2xl border-t-8 border-green-500 overflow-y-auto max-h-[90vh]">
-              <div className="flex justify-between items-center mb-6"><h3 className="text-base font-black text-slate-900 uppercase">Verifica Dati</h3><button onClick={() => setScanResult(null)} className="text-gray-300"><X size={24} /></button></div>
-              <div className="grid grid-cols-2 gap-3">
-                {[{ label: 'Scheda *', key: 'scheda' }, { label: 'Misura *', key: 'misura' }, { label: 'Peso (kg)', key: 'ordine_kg_richiesto' }, { label: 'Consegna', key: 'data_consegna', type: 'date' }, { label: 'Cliente', key: 'cliente', col: 'col-span-2' }].map((f: any) => (
-                  <div key={f.key} className={`p-2 bg-gray-50 rounded-xl border border-gray-100 ${f.col || ''}`}><label className="block text-[8px] font-black text-gray-400 uppercase mb-1">{f.label}</label><input type={f.type || 'text'} value={scanResult[f.key] || ''} onChange={(e) => setScanResult({...scanResult, [f.key]: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" /></div>
-                ))}
+          <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-1 z-[250]">
+            <div className="bg-white rounded-[2rem] w-full max-w-xl shadow-2xl border-t-8 border-green-500 flex flex-col max-h-[98vh] overflow-hidden">
+              {/* Header Fisso */}
+              <div className="px-5 py-4 border-b flex justify-between items-center bg-white shrink-0">
+                <h3 className="text-[13px] font-black text-slate-900 uppercase flex items-center gap-2">
+                  {isManualEntry ? <Keyboard size={18} className="text-yellow-600" /> : <ClipboardList size={18} className="text-green-600" />}
+                  {isManualEntry ? 'Inserimento Manuale' : 'Riepilogo Dati Estratti'}
+                </h3>
+                <button onClick={() => { setScanResult(null); setIsManualEntry(false); }} className="text-gray-300 hover:text-red-500"><X size={24} /></button>
               </div>
-              <div className="flex gap-3 mt-8 border-t pt-6"><button onClick={() => setScanResult(null)} className="flex-1 py-4 bg-gray-50 text-gray-400 rounded-2xl font-black uppercase text-[11px]">Annulla</button><button onClick={handleInviaScheda} className="flex-[2] py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-[11px] shadow-xl">Salva Scheda</button></div>
+              
+              {/* Corpo Scorrevole */}
+              <div className="flex-grow overflow-y-auto p-3 sm:p-5 space-y-5">
+                {/* DATI PRINCIPALI */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100">
+                     <label className="block text-[7px] font-black text-blue-400 uppercase mb-0.5">CLIENTE *</label>
+                     <input type="text" value={scanResult.cliente || ''} onChange={(e) => setScanResult({...scanResult, cliente: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase text-xs" />
+                  </div>
+                  <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">N° SCHEDA *</label>
+                    <input type="text" value={scanResult.scheda || ''} onChange={(e) => setScanResult({...scanResult, scheda: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                  </div>
+                  <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">MISURA FINALE *</label>
+                    <input type="text" value={scanResult.misura || ''} onChange={(e) => setScanResult({...scanResult, misura: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                  </div>
+                  
+                  {/* PESI: TEORICO vs ORDINATO */}
+                  <div className="p-2.5 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                    <label className="block text-[7px] font-black text-emerald-600 uppercase mb-0.5 flex items-center gap-1"><Scale size={8} /> PESO TEORICO (KG)</label>
+                    <input type="text" value={scanResult.ordine_kg_lavorato || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_lavorato: e.target.value})} className="w-full bg-transparent border-none font-black text-emerald-700 outline-none" placeholder="0" />
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                    <label className="block text-[7px] font-black text-slate-400 uppercase mb-0.5">PESO ORDINATO (KG)</label>
+                    <input type="text" value={scanResult.ordine_kg_richiesto || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_richiesto: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" placeholder="0" />
+                  </div>
+
+                  <div className="col-span-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">DATA CONSEGNA</label>
+                    <input type="date" value={scanResult.data_consegna || ''} onChange={(e) => setScanResult({...scanResult, data_consegna: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none text-[10px]" />
+                  </div>
+                </div>
+
+                {/* DATI TECNICI MATERIALE */}
+                <div className="pt-3 border-t">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2.5 bg-yellow-50/50 rounded-xl border border-yellow-100">
+                      <label className="block text-[7px] font-black text-yellow-600 uppercase mb-0.5">LEGA *</label>
+                      <input type="text" value={scanResult.mcoil_lega || ''} onChange={(e) => setScanResult({...scanResult, mcoil_lega: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase" />
+                    </div>
+                    <div className="p-2.5 bg-yellow-50/50 rounded-xl border border-yellow-100">
+                      <label className="block text-[7px] font-black text-yellow-600 uppercase mb-0.5">STATO FISICO *</label>
+                      <input type="text" value={scanResult.mcoil_stato_fisico || ''} onChange={(e) => setScanResult({...scanResult, mcoil_stato_fisico: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase" />
+                    </div>
+                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">SPESSORE MC</label>
+                      <input type="text" value={scanResult.spessore || ''} onChange={(e) => setScanResult({...scanResult, spessore: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                    </div>
+                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">LARGHEZZA MC</label>
+                      <input type="text" value={scanResult.mcoil_larghezza || ''} onChange={(e) => setScanResult({...scanResult, mcoil_larghezza: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                    </div>
+                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">CODICE MCOIL</label>
+                      <input type="text" value={scanResult.mcoil || ''} onChange={(e) => setScanResult({...scanResult, mcoil: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase" />
+                    </div>
+                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">PESO MCOIL (KG)</label>
+                      <input type="text" value={scanResult.mcoil_kg || ''} onChange={(e) => setScanResult({...scanResult, mcoil_kg: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                    </div>
+                    <div className="col-span-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">NOTE / CONFERMA VOCE</label>
+                      <input type="text" value={scanResult.conferma_voce || ''} onChange={(e) => setScanResult({...scanResult, conferma_voce: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Fisso */}
+              <div className="p-4 bg-slate-50 border-t flex gap-3 shrink-0">
+                <button onClick={() => { setScanResult(null); setIsManualEntry(false); }} className="flex-1 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-sm">Annulla</button>
+                <button onClick={handleInviaScheda} className="flex-[2] py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-green-600/30 active:scale-95 transition-all">Salva Scheda</button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Modal Inizio Fase */}
-        {showFasePicker && (
-          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-6 z-[100]">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl">
-              <h3 className="text-sm font-black text-slate-900 mb-6 text-center uppercase">Inizio Lavoro</h3>
-              <div className="flex flex-col gap-2">
-                {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
-                  <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="w-full p-4 bg-blue-50 text-blue-800 rounded-xl font-black text-[11px] uppercase">{f.fase_di_lavorazione}</button>
-                ))}
-              </div>
-              <button onClick={() => setShowFasePicker(null)} className="mt-4 w-full text-[10px] font-black text-gray-300 uppercase">Indietro</button>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Termina */}
-        {showTerminaPicker && (
-          <TerminaModal lavorazione={showTerminaPicker} onClose={() => setShowTerminaPicker(null)} onConfirm={finishLavorazione} />
-        )}
-
-        {/* Picker Postazione */}
+        {/* Modal Postazione Picker */}
         {showMacchinaPicker && (
           <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-[100]">
             <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl">
-              <h3 className="text-sm font-black text-slate-900 mb-6 text-center uppercase">Seleziona Macchina</h3>
+              <h3 className="text-sm font-black text-slate-900 mb-6 text-center uppercase tracking-widest">Postazione Lavoro</h3>
               <div className="grid grid-cols-2 gap-3">
                 {macchine.map(m => (
-                  <button key={m.id_macchina} onClick={() => { setSelectedMacchina(m.id_macchina); localStorage.setItem('kme_selected_macchina', m.id_macchina); setShowMacchinaPicker(false); }} className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-yellow-500 hover:text-white border border-gray-100 rounded-xl transition-all group shrink-0"><Laptop size={20} className="mb-2 opacity-30 group-hover:opacity-100" /><span className="text-sm font-black uppercase">{m.id_macchina}</span></button>
+                  <button key={m.id_macchina} onClick={() => { setSelectedMacchina(m.id_macchina); localStorage.setItem('kme_selected_macchina', m.id_macchina); setShowMacchinaPicker(false); }} className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-yellow-500 hover:text-white border border-gray-100 rounded-xl transition-all group shrink-0 active:scale-95"><Laptop size={20} className="mb-2 opacity-30 group-hover:opacity-100" /><span className="text-sm font-black uppercase tracking-tighter">{m.id_macchina}</span></button>
                 ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Loading Overlay CON TASTO DI EMERGENZA */}
+        {/* Modal Fasi Picker */}
+        {showFasePicker && (
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-6 z-[100]">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl">
+              <h3 className="text-sm font-black text-slate-900 mb-6 text-center uppercase tracking-widest">Avvio Lavorazione</h3>
+              <div className="flex flex-col gap-2">
+                {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
+                  <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="w-full p-4 bg-blue-50 hover:bg-blue-600 text-blue-800 hover:text-white rounded-xl font-black text-[11px] uppercase tracking-tighter transition-all active:scale-95">{f.fase_di_lavorazione}</button>
+                ))}
+              </div>
+              <button onClick={() => setShowFasePicker(null)} className="mt-4 w-full py-2 text-[10px] font-black text-gray-300 uppercase tracking-widest">Indietro</button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading Overlay */}
         {loading && (
-          <div className="fixed inset-0 bg-white/70 backdrop-blur-md flex flex-col items-center justify-center z-[500] p-6 text-center">
+          <div className="fixed inset-0 bg-white/85 backdrop-blur-md flex flex-col items-center justify-center z-[1000] p-6 text-center">
              <div className="relative mb-8">
                 <div className="w-20 h-20 border-4 border-yellow-100 border-t-yellow-600 rounded-full animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center"><Activity size={24} className="text-yellow-600 animate-pulse" /></div>
@@ -376,15 +475,14 @@ const Produzione: React.FC = () => {
              
              {loadingMsg.includes('ANALISI') && (
                <div className="animate-in fade-in duration-1000 slide-in-from-bottom-2">
-                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-4">L'analisi sta impiegando troppo tempo?</p>
                  <button 
                    onClick={() => {
                      setLoading(false);
-                     setScanResult({ scheda: '', cliente: '', misura: '', ordine_kg_richiesto: '', data_consegna: formatDate(new Date()) });
+                     triggerManualEntry();
                    }}
                    className="flex items-center gap-2 bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl active:scale-95"
                  >
-                   <AlertTriangle size={16} className="text-yellow-400" /> ANNULLA E SCRIVI A MANO
+                   <AlertTriangle size={16} className="text-yellow-400" /> ANNULLA E INSERISCI A MANO
                  </button>
                </div>
              )}
@@ -405,21 +503,21 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-[130]">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border-t-8 border-red-600">
+      <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl border-t-8 border-red-600">
         <div className="flex justify-between items-start mb-6">
-          <h3 className="text-base font-black text-slate-900 uppercase">Chiusura Lavorazione</h3>
-          <button onClick={onClose} className="text-gray-300"><X size={22} /></button>
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tighter">Fine Lavorazione</h3>
+          <button onClick={onClose} className="text-gray-300 hover:text-red-500"><X size={22} /></button>
         </div>
         <div className="space-y-4">
-          <div className="bg-gray-50 p-4 rounded-2xl border text-center">
-            <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">KG REALI</label>
-            <input type="number" value={kg} onChange={(e) => setKg(Number(e.target.value))} className="w-full bg-transparent border-none font-black text-4xl text-center text-red-600 outline-none" />
+          <div className="bg-gray-50 p-6 rounded-3xl border text-center">
+            <label className="block text-[9px] font-black text-gray-400 uppercase mb-2 tracking-widest">KG REALI LAVORATI</label>
+            <input type="number" value={kg} onChange={(e) => setKg(Number(e.target.value))} className="w-full bg-transparent border-none font-black text-5xl text-center text-red-600 outline-none" />
           </div>
           <div className="p-4 rounded-2xl bg-blue-50 text-center border border-blue-100">
-            <span className="text-[10px] font-black text-blue-400 uppercase">Sviluppo: {metri} metri</span>
+            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Sviluppo: {metri} metri lineari</span>
           </div>
         </div>
-        <button onClick={() => onConfirm(lavorazione, kg, 1, 1, metri)} className="mt-8 w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px]">Salva e Chiudi</button>
+        <button onClick={() => onConfirm(lavorazione, kg, 1, 1, metri)} className="mt-8 w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl active:scale-95 transition-all">Salva e Archivia</button>
       </div>
     </div>
   );
