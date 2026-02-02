@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { ChatMessage, OnlineUser } from '../types';
-import { Send, Users, LogOut, UserCircle, MessageSquare, ChevronRight } from 'lucide-react';
+import { Send, Users, LogOut, UserCircle, MessageSquare, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react';
 
 const Chat: React.FC = () => {
   const [username, setUsername] = useState<string>(localStorage.getItem('chat_username') || '');
@@ -12,46 +12,44 @@ const Chat: React.FC = () => {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [recipient, setRecipient] = useState<string>('ALL');
   const [isAlerting, setIsAlerting] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Refs per gestione notifiche
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const titleIntervalRef = useRef<number | null>(null);
   const originalTitle = useRef(document.title);
 
-  // Inizializza audio
   useEffect(() => {
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
     audioRef.current.volume = 0.8;
   }, []);
 
   const triggerNotifications = () => {
-    // 1. Suono
-    if (audioRef.current) {
-      audioRef.current.play().catch(e => console.debug("Autoplay blocked or audio error"));
-    }
+    try {
+      if (audioRef.current) {
+        audioRef.current.play().catch(() => console.debug("Audio playback interrotto"));
+      }
 
-    // 2. Pulse visivo
-    setIsAlerting(true);
-    setTimeout(() => setIsAlerting(false), 3000);
+      setIsAlerting(true);
+      setTimeout(() => setIsAlerting(false), 3000);
 
-    // 3. Tab Flash (se la finestra non è a fuoco)
-    if (!document.hasFocus()) {
-      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
-      let showAlt = false;
-      titleIntervalRef.current = window.setInterval(() => {
-        document.title = showAlt ? "🔴 NUOVO MESSAGGIO!" : originalTitle.current;
-        showAlt = !showAlt;
-      }, 1000);
-    }
+      if (!document.hasFocus()) {
+        if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+        let showAlt = false;
+        titleIntervalRef.current = window.setInterval(() => {
+          document.title = showAlt ? "🔴 NUOVO MESSAGGIO!" : originalTitle.current;
+          showAlt = !showAlt;
+        }, 1000);
+      }
 
-    // 4. Vibrazione (Mobile/Tablet)
-    if ("vibrate" in navigator) {
-      navigator.vibrate([200, 100, 200]);
+      if ("vibrate" in navigator) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } catch (e) {
+      console.error("Errore notifiche:", e);
     }
   };
 
-  // Reset titolo quando la finestra torna a fuoco
   useEffect(() => {
     const handleFocus = () => {
       if (titleIntervalRef.current) {
@@ -82,31 +80,38 @@ const Chat: React.FC = () => {
     if (!username) return;
 
     const fetchMessages = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .select('*')
         .order('created_at', { ascending: true })
         .limit(100);
       
-      if (data) setMessages(data);
+      if (error) {
+        console.error("Errore fetch messaggi:", error);
+      } else if (data) {
+        setMessages(data);
+      }
     };
     fetchMessages();
 
     const messageChannel = supabase
-      .channel('public:messages')
+      .channel('chat-room')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMessage = payload.new as ChatMessage;
           const forMe = newMessage.recipient_name === 'ALL' || newMessage.recipient_name === username;
-          const fromOther = newMessage.sender_name !== username;
+          const fromMe = newMessage.sender_name === username;
 
-          if (forMe || newMessage.sender_name === username) {
-            setMessages((prev) => [...prev, newMessage]);
+          if (forMe || fromMe) {
+            setMessages((prev) => {
+              const exists = prev.some(m => m.id === newMessage.id);
+              if (exists) return prev;
+              return [...prev, newMessage];
+            });
             
-            // Trigger notifiche solo se il messaggio è per me e inviato da altri
-            if (forMe && fromOther) {
+            if (forMe && !fromMe) {
               triggerNotifications();
             }
           }
@@ -151,9 +156,9 @@ const Chat: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputName.trim()) {
-      setUsername(inputName.trim());
-      localStorage.setItem('chat_username', inputName.trim());
-      // Interazione utente necessaria per sbloccare l'audio in alcuni browser
+      const cleanName = inputName.trim().toUpperCase();
+      setUsername(cleanName);
+      localStorage.setItem('chat_username', cleanName);
       if (audioRef.current) {
         audioRef.current.play().then(() => audioRef.current?.pause()).catch(() => {});
       }
@@ -167,39 +172,46 @@ const Chat: React.FC = () => {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || isSending) return;
 
+    setIsSending(true);
     const newMessage: ChatMessage = {
       sender_name: username,
       recipient_name: recipient,
       content: message.trim(),
     };
 
-    const { error } = await supabase.from('messages').insert([newMessage]);
-    if (!error) {
+    try {
+      const { error } = await supabase.from('messages').insert([newMessage]);
+      if (error) throw error;
       setMessage('');
+    } catch (err: any) {
+      console.error("Errore invio:", err);
+      alert(`ERRORE INVIO: ${err.message || "Controlla la connessione o la tabella del DB"}`);
+    } finally {
+      setIsSending(false);
     }
   };
 
   if (!username) {
     return (
-      <div className="bg-white rounded-[2rem] shadow-2xl p-8 border border-yellow-100 animate-in fade-in duration-500">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-200 animate-in fade-in duration-500">
         <div className="flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-yellow-50 rounded-3xl flex items-center justify-center text-yellow-600 mb-6 shadow-inner">
+          <div className="w-20 h-20 bg-yellow-400 rounded-3xl flex items-center justify-center text-slate-900 mb-6 shadow-lg">
             <UserCircle size={48} />
           </div>
-          <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight">Accedi alla Chat</h2>
-          <p className="text-slate-400 text-sm mb-8 leading-relaxed">Inserisci il tuo nome per comunicare in tempo reale con il team.</p>
+          <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Accedi alla Chat</h2>
+          <p className="text-slate-600 text-sm mb-8 leading-relaxed font-semibold">Inserisci il tuo nome per iniziare.</p>
           <form onSubmit={handleLogin} className="w-full space-y-4">
             <input
               type="text"
               value={inputName}
               onChange={(e) => setInputName(e.target.value)}
-              placeholder="Il tuo nome..."
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-yellow-400/20 focus:border-yellow-400 outline-none transition-all font-bold text-center"
+              placeholder="ES. ANDREA..."
+              className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-yellow-400/20 focus:border-yellow-500 outline-none transition-all font-black text-center uppercase text-slate-900 placeholder:text-slate-400"
               required
             />
-            <button className="w-full py-4 bg-yellow-500 text-white font-black rounded-2xl hover:bg-yellow-600 transition-all shadow-lg active:scale-95 uppercase tracking-widest text-xs">
+            <button className="w-full py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95 uppercase tracking-widest text-xs">
               ENTRA NELLA STANZA
             </button>
           </form>
@@ -209,21 +221,20 @@ const Chat: React.FC = () => {
   }
 
   return (
-    <div className={`bg-white rounded-[2rem] shadow-2xl flex flex-col h-[650px] border-4 overflow-hidden relative transition-all duration-300 ${isAlerting ? 'border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.5)] animate-glow-pulse' : 'border-slate-100'}`}>
-      {/* Header */}
+    <div className={`bg-white rounded-[2rem] shadow-2xl flex flex-col h-[650px] border-4 overflow-hidden relative transition-all duration-300 ${isAlerting ? 'border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.5)] animate-glow-pulse' : 'border-slate-200'}`}>
       <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+            <div className="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center text-slate-900 shadow-lg">
               <MessageSquare size={20} />
             </div>
             <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-slate-900 rounded-full"></div>
           </div>
           <div>
-            <p className="font-black text-[11px] uppercase tracking-widest leading-none">{username}</p>
+            <p className="font-black text-[11px] uppercase tracking-widest leading-none text-white">{username}</p>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-              <p className="text-[9px] font-bold text-slate-400 uppercase">{onlineUsers.length} Online</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{onlineUsers.length} Online</p>
             </div>
           </div>
         </div>
@@ -232,25 +243,24 @@ const Chat: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex flex-grow overflow-hidden bg-slate-50/50">
-        {/* Sidebar Destinatari */}
-        <div className="w-24 sm:w-32 bg-white border-r border-slate-100 p-3 overflow-y-auto hidden md:block shrink-0">
-          <p className="text-[8px] font-black text-slate-400 mb-4 uppercase tracking-widest px-1">Canale</p>
+      <div className="flex flex-grow overflow-hidden bg-slate-100">
+        <div className="w-24 sm:w-32 bg-white border-r border-slate-200 p-3 overflow-y-auto hidden md:block shrink-0">
+          <p className="text-[8px] font-black text-slate-500 mb-4 uppercase tracking-widest px-1">Canale</p>
           <div className="space-y-1">
             <button
               onClick={() => setRecipient('ALL')}
-              className={`w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-between group ${recipient === 'ALL' ? 'bg-yellow-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+              className={`w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-between group ${recipient === 'ALL' ? 'bg-yellow-400 text-slate-900 shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
             >
               <span>Pubblico</span>
               {recipient === 'ALL' && <ChevronRight size={10} />}
             </button>
-            <div className="pt-4 mb-2 border-t border-slate-50">
-              <p className="text-[8px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1">Privato</p>
+            <div className="pt-4 mb-2 border-t border-slate-100">
+              <p className="text-[8px] font-black text-slate-500 mb-2 uppercase tracking-widest px-1">Privato</p>
               {onlineUsers.filter(u => u.username !== username).map((u, i) => (
                 <button
                   key={i}
                   onClick={() => setRecipient(u.username)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-[9px] font-bold transition-all truncate flex items-center justify-between mb-1 ${recipient === u.username ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                  className={`w-full text-left px-3 py-2 rounded-xl text-[9px] font-bold transition-all truncate flex items-center justify-between mb-1 ${recipient === u.username ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'}`}
                 >
                   <span className="truncate">{u.username}</span>
                   <div className={`w-1 h-1 rounded-full ${recipient === u.username ? 'bg-white' : 'bg-green-500'}`}></div>
@@ -260,13 +270,12 @@ const Chat: React.FC = () => {
           </div>
         </div>
 
-        {/* Area Messaggi */}
         <div className="flex-grow flex flex-col min-w-0">
-          <div className="bg-white/80 backdrop-blur-sm px-4 py-2 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-              Stai scrivendo a: <span className={`ml-1 ${recipient === 'ALL' ? 'text-yellow-600' : 'text-slate-900'}`}>{recipient === 'ALL' ? 'TUTTI' : recipient.toUpperCase()}</span>
+          <div className="bg-white/90 backdrop-blur-sm px-4 py-2 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+              Destinatario: <span className={`ml-1 font-black ${recipient === 'ALL' ? 'text-yellow-600' : 'text-slate-900'}`}>{recipient === 'ALL' ? 'TUTTI' : recipient.toUpperCase()}</span>
             </span>
-            <Users size={12} className="text-slate-300 md:hidden" />
+            <Users size={12} className="text-slate-400 md:hidden" />
           </div>
 
           <div 
@@ -280,19 +289,19 @@ const Chat: React.FC = () => {
               return (
                 <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 duration-300`}>
                   <div className={`flex items-center gap-2 mb-1 px-1`}>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">
-                      {isMe ? 'Tu' : msg.sender_name} {isPrivate && !isMe && ` (Privato)`}
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-tight">
+                      {isMe ? 'TU' : msg.sender_name} {isPrivate && !isMe && ` (PRIVATO)`}
                     </span>
                   </div>
                   <div className={`group relative max-w-[90%] px-4 py-3 rounded-2xl text-[13px] shadow-sm transition-all hover:shadow-md ${
                     isMe 
                       ? 'bg-slate-900 text-white rounded-tr-none' 
                       : isPrivate 
-                        ? 'bg-yellow-500 text-white rounded-tl-none'
-                        : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
+                        ? 'bg-yellow-400 text-slate-900 rounded-tl-none border border-yellow-500/50'
+                        : 'bg-white text-slate-800 rounded-tl-none border border-slate-200'
                   }`}>
-                    <p className="leading-relaxed break-words">{msg.content}</p>
-                    <span className={`text-[8px] mt-1 block opacity-40 text-right ${isMe || isPrivate ? 'text-white' : 'text-slate-500'}`}>
+                    <p className="leading-relaxed font-medium break-words">{msg.content}</p>
+                    <span className={`text-[8px] mt-1 block opacity-50 text-right font-black ${isMe ? 'text-white' : 'text-slate-600'}`}>
                       {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                     </span>
                   </div>
@@ -301,23 +310,24 @@ const Chat: React.FC = () => {
             })}
           </div>
 
-          {/* Form Invio */}
-          <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+          <div className="p-4 bg-white border-t border-slate-200 shrink-0">
             <form onSubmit={sendMessage} className="flex gap-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={recipient === 'ALL' ? 'Invia un messaggio pubblico...' : `Scrivi privatamente a ${recipient}...`}
-                className="flex-grow px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-[1.25rem] text-sm focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all placeholder:text-slate-400 placeholder:text-xs font-medium"
+                disabled={isSending}
+                placeholder={recipient === 'ALL' ? 'SCRIVI UN MESSAGGIO PUBBLICO...' : `SCRIVI PRIVATAMENTE A ${recipient}...`}
+                className="flex-grow px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-[13px] focus:ring-4 focus:ring-yellow-400/10 focus:border-yellow-500 outline-none transition-all placeholder:text-slate-400 font-bold uppercase text-slate-900"
               />
               <button 
                 type="submit"
-                className={`p-3.5 rounded-[1.25rem] transition-all shadow-lg active:scale-90 flex items-center justify-center ${
-                  recipient === 'ALL' ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 'bg-slate-900 hover:bg-black text-white'
+                disabled={isSending || !message.trim()}
+                className={`p-4 rounded-2xl transition-all shadow-xl active:scale-90 flex items-center justify-center disabled:opacity-50 ${
+                  recipient === 'ALL' ? 'bg-yellow-400 hover:bg-yellow-500 text-slate-900' : 'bg-slate-900 hover:bg-black text-white'
                 }`}
               >
-                <Send size={20} />
+                {isSending ? <RefreshCw size={22} className="animate-spin" /> : <Send size={22} />}
               </button>
             </form>
           </div>
@@ -334,17 +344,17 @@ const Chat: React.FC = () => {
           animation: glow-pulse 1.5s infinite;
         }
         .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+          width: 5px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
+          background: #f1f5f9;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #e2e8f0;
+          background: #cbd5e1;
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
+          background: #94a3b8;
         }
       `}</style>
     </div>
