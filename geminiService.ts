@@ -2,9 +2,11 @@
 /**
  * SERVIZIO GEMINI (MODALITÀ SICURA)
  * Invia l'immagine alla nostra API server-side invece di chiamare direttamente Google.
- * Questo impedisce l'esposizione della API_KEY nel browser.
  */
 export const processLabelImage = async (base64Image: string) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // Timeout di 15 secondi
+
   try {
     const response = await fetch('/api/analyze', {
       method: 'POST',
@@ -12,7 +14,10 @@ export const processLabelImage = async (base64Image: string) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ image: base64Image }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json();
@@ -21,7 +26,11 @@ export const processLabelImage = async (base64Image: string) => {
 
     return await response.json();
   } catch (error: any) {
-    console.error("Errore Chiamata Sicura Gemini:", error);
+    clearTimeout(timeoutId);
+    console.error("Errore Chiamata Gemini:", error);
+    if (error.name === 'AbortError') {
+      throw new Error("Il server ha impiegato troppo tempo. Riprova.");
+    }
     throw new Error(error.message || "Impossibile contattare il server di analisi");
   }
 };
