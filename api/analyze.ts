@@ -30,25 +30,24 @@ export default async function handler(req: any, res: any) {
             }
           },
           {
-            text: `Analizza questa etichetta tecnica di produzione metalli KME. 
-              Estrai TUTTI i dati con estrema precisione. 
+            text: `Analizza questa etichetta tecnica KME. 
+              Estrai i dati seguendo RIGOROSAMENTE queste istruzioni:
               
-              ISTRUZIONI CRITICHE:
-              - SCHEDA: Numero dopo 'SCHEDA' o in alto a destra.
-              - CLIENTE: Ragione sociale dell'azienda.
-              - PESO TEORICO (ordine_kg_lavorato): Il numero solitamente sopra la quantità ordinata.
-              - PESO ORDINATO (ordine_kg_richiesto): La quantità finale richiesta dal cliente.
-              - MISURA: Larghezza nastro richiesta.
-              - MCOIL: Codice della bobina madre (es. MC... o numero bobina).
-              - LEGA/STATO: Es. RAME, R240, COTTO, CRUDO.
+              1. SCHEDA: Il numero dopo 'SCHEDA' o 'ORDER N.'.
+              2. CLIENTE: Ragione sociale completa.
+              3. PESO TEORICO (ordine_kg_lavorato): È il numero situato FISICAMENTE SOPRA il peso ordinato nel blocco quantità.
+              4. PESO ORDINATO (ordine_kg_richiesto): È il numero situato SOTTO il peso teorico.
+              5. MISURA: La larghezza nominale.
+              6. SPESSORE: Es. 0.30, 0.45.
+              7. MCOIL: Il codice della bobina di partenza (es. MC...).
 
               Restituisci questo JSON preciso:
               {
                 "scheda": intero,
                 "cliente": "stringa",
                 "misura": decimale,
-                "ordine_kg_lavorato": intero (peso teorico),
-                "ordine_kg_richiesto": intero (peso ordinato),
+                "ordine_kg_lavorato": intero,
+                "ordine_kg_richiesto": intero,
                 "data_consegna": "YYYY-MM-DD",
                 "mcoil": "stringa",
                 "mcoil_kg": intero,
@@ -58,12 +57,12 @@ export default async function handler(req: any, res: any) {
                 "mcoil_stato_fisico": "stringa",
                 "conferma_voce": "stringa"
               }
-              Se un dato non è leggibile, usa null. Non inventare.`
+              IMPORTANTE: Se un valore non è leggibile, usa null. Non aggiungere testo extra.`
           }
         ]
       },
       config: {
-        thinkingConfig: { thinkingBudget: 0 },
+        temperature: 0,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -86,12 +85,9 @@ export default async function handler(req: any, res: any) {
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("Risposta vuota");
-    
-    res.status(200).json(JSON.parse(text.trim()));
+    res.status(200).json(JSON.parse(response.text.trim()));
   } catch (error: any) {
-    console.error("Errore API Analisi:", error);
-    res.status(500).json({ error: "Errore durante l'analisi." });
+    console.error("Errore API:", error);
+    res.status(500).json({ error: "Errore analisi IA." });
   }
 }

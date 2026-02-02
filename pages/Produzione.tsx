@@ -13,7 +13,7 @@ import { processLabelImage } from '../geminiService';
 import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, Camera, Upload, Keyboard, CheckCircle2, PlayCircle, X, 
-  Laptop, ClipboardList, Box, Hash, User, Ruler, Activity, AlertTriangle, HardDrive, Scale
+  Laptop, ClipboardList, Box, Hash, User, Ruler, Activity, AlertTriangle, HardDrive, Scale, Search
 } from 'lucide-react';
 
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
@@ -36,7 +36,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-const compressImage = (base64: string, maxWidth = 1600, quality = 0.85): Promise<string> => {
+const compressImage = (base64: string, maxWidth = 2200, quality = 0.98): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = `data:image/jpeg;base64,${base64}`;
@@ -51,7 +51,6 @@ const compressImage = (base64: string, maxWidth = 1600, quality = 0.85): Promise
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      // Migliora nitidezza
       if (ctx) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -69,6 +68,7 @@ const Produzione: React.FC = () => {
   const [selectedMacchina, setSelectedMacchina] = useState<string | null>(localStorage.getItem('kme_selected_macchina'));
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [fasi, setFasi] = useState<FaseLavorazione[]>([]);
+  const [clienti, setClienti] = useState<Cliente[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(formatDate(new Date()));
   const [lavorazioni, setLavorazioni] = useState<Lavorazione[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,8 +88,10 @@ const Produzione: React.FC = () => {
     try {
       const { data: m } = await supabase.from('l_macchine').select('*').order('macchina');
       const { data: f } = await supabase.from('l_fasi_di_lavorazione').select('*').order('fase_di_lavorazione');
+      const { data: c } = await supabase.from('l_clienti').select('*').order('cliente');
       if (m) setMacchine(m);
       if (f) setFasi(f);
+      if (c) setClienti(c);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -149,7 +151,7 @@ const Produzione: React.FC = () => {
     if (!scanResult || !selectedMacchina) return;
     
     if (!scanResult.scheda || !scanResult.cliente) {
-      alert("Scheda e Cliente sono obbligatori.");
+      alert("ATTENZIONE: Il Numero Scheda e il Cliente sono obbligatori.");
       return;
     }
 
@@ -159,6 +161,7 @@ const Produzione: React.FC = () => {
       const nomeCliente = (scanResult.cliente || 'CLIENTE IGNOTO').toUpperCase().trim();
       const safeClientId = nomeCliente.replace(/[^A-Z0-9]/g, '_').substring(0, 30);
       
+      // Upsert cliente
       await supabase.from('l_clienti').upsert({ id_cliente: safeClientId, cliente: nomeCliente }, { onConflict: 'id_cliente' });
 
       const payload = {
@@ -186,6 +189,7 @@ const Produzione: React.FC = () => {
       setScanResult(null);
       setIsManualEntry(false);
       await fetchLavorazioni(false);
+      await fetchMeta(); // Aggiorna lista clienti per futuro uso
     } catch (err: any) {
       console.error("Errore Salvataggio:", err);
       alert(`Errore: ${err.message}`);
@@ -333,7 +337,7 @@ const Produzione: React.FC = () => {
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
             <div className="bg-white rounded-3xl p-8 w-full max-w-xs shadow-2xl relative border-t-4 border-yellow-500">
               <button onClick={() => setShowScanOptions(false)} className="absolute top-5 right-5 text-gray-300"><X size={22} /></button>
-              <h3 className="text-sm font-black text-slate-900 mb-8 text-center uppercase tracking-widest">Nuova Scheda</h3>
+              <h3 className="text-sm font-black text-slate-900 mb-8 text-center uppercase tracking-widest">Aggiunta Scheda</h3>
               <div className="flex flex-col gap-3">
                 <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-4 bg-slate-900 text-white p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95"><Camera size={18} /> SCATTA FOTO HD</button>
                 <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-4 bg-gray-100 text-slate-700 p-4 rounded-2xl font-black text-[11px] uppercase active:scale-95"><Upload size={18} /> GALLERIA</button>
@@ -345,11 +349,10 @@ const Produzione: React.FC = () => {
           </div>
         )}
 
-        {/* Modal Riepilogo AGGIORNATO CON PESO TEORICO E DESIGN COMPATTO */}
+        {/* Modal Riepilogo AGGIORNATO */}
         {scanResult && (
           <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-1 z-[250]">
             <div className="bg-white rounded-[2rem] w-full max-w-xl shadow-2xl border-t-8 border-green-500 flex flex-col max-h-[98vh] overflow-hidden">
-              {/* Header Fisso */}
               <div className="px-5 py-4 border-b flex justify-between items-center bg-white shrink-0">
                 <h3 className="text-[13px] font-black text-slate-900 uppercase flex items-center gap-2">
                   {isManualEntry ? <Keyboard size={18} className="text-yellow-600" /> : <ClipboardList size={18} className="text-green-600" />}
@@ -358,13 +361,24 @@ const Produzione: React.FC = () => {
                 <button onClick={() => { setScanResult(null); setIsManualEntry(false); }} className="text-gray-300 hover:text-red-500"><X size={24} /></button>
               </div>
               
-              {/* Corpo Scorrevole */}
               <div className="flex-grow overflow-y-auto p-3 sm:p-5 space-y-5">
-                {/* DATI PRINCIPALI */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="col-span-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100">
-                     <label className="block text-[7px] font-black text-blue-400 uppercase mb-0.5">CLIENTE *</label>
-                     <input type="text" value={scanResult.cliente || ''} onChange={(e) => setScanResult({...scanResult, cliente: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase text-xs" />
+                     <label className="block text-[7px] font-black text-blue-400 uppercase mb-0.5">CLIENTE (Scegli o Scrivi nuovo) *</label>
+                     <div className="relative">
+                        <input 
+                          list="lista-clienti"
+                          type="text" 
+                          value={scanResult.cliente || ''} 
+                          onChange={(e) => setScanResult({...scanResult, cliente: e.target.value})} 
+                          className="w-full bg-transparent border-none font-bold text-slate-900 outline-none uppercase text-xs" 
+                          placeholder="DIGITA NOME CLIENTE..."
+                        />
+                        <datalist id="lista-clienti">
+                          {clienti.map(c => <option key={c.id_cliente} value={c.cliente} />)}
+                        </datalist>
+                        <Search size={10} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-300" />
+                     </div>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
                     <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">N° SCHEDA *</label>
@@ -375,14 +389,13 @@ const Produzione: React.FC = () => {
                     <input type="text" value={scanResult.misura || ''} onChange={(e) => setScanResult({...scanResult, misura: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
                   </div>
                   
-                  {/* PESI: TEORICO vs ORDINATO */}
-                  <div className="p-2.5 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                    <label className="block text-[7px] font-black text-emerald-600 uppercase mb-0.5 flex items-center gap-1"><Scale size={8} /> PESO TEORICO (KG)</label>
-                    <input type="text" value={scanResult.ordine_kg_lavorato || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_lavorato: e.target.value})} className="w-full bg-transparent border-none font-black text-emerald-700 outline-none" placeholder="0" />
+                  <div className="p-2.5 bg-emerald-50/50 rounded-xl border border-emerald-100 shadow-inner">
+                    <label className="block text-[7px] font-black text-emerald-600 uppercase mb-0.5 flex items-center gap-1"><Scale size={8} /> PESO TEORICO (SOPRA)</label>
+                    <input type="text" value={scanResult.ordine_kg_lavorato || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_lavorato: e.target.value})} className="w-full bg-transparent border-none font-black text-emerald-700 outline-none text-lg" placeholder="0" />
                   </div>
                   <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <label className="block text-[7px] font-black text-slate-400 uppercase mb-0.5">PESO ORDINATO (KG)</label>
-                    <input type="text" value={scanResult.ordine_kg_richiesto || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_richiesto: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" placeholder="0" />
+                    <label className="block text-[7px] font-black text-slate-400 uppercase mb-0.5">PESO ORDINATO (SOTTO)</label>
+                    <input type="text" value={scanResult.ordine_kg_richiesto || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_richiesto: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none text-lg" placeholder="0" />
                   </div>
 
                   <div className="col-span-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
@@ -391,7 +404,6 @@ const Produzione: React.FC = () => {
                   </div>
                 </div>
 
-                {/* DATI TECNICI MATERIALE */}
                 <div className="pt-3 border-t">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="p-2.5 bg-yellow-50/50 rounded-xl border border-yellow-100">
@@ -418,15 +430,10 @@ const Produzione: React.FC = () => {
                       <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">PESO MCOIL (KG)</label>
                       <input type="text" value={scanResult.mcoil_kg || ''} onChange={(e) => setScanResult({...scanResult, mcoil_kg: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
                     </div>
-                    <div className="col-span-2 p-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                      <label className="block text-[7px] font-black text-gray-400 uppercase mb-0.5">NOTE / CONFERMA VOCE</label>
-                      <input type="text" value={scanResult.conferma_voce || ''} onChange={(e) => setScanResult({...scanResult, conferma_voce: e.target.value})} className="w-full bg-transparent border-none font-bold text-slate-900 outline-none" />
-                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Footer Fisso */}
               <div className="p-4 bg-slate-50 border-t flex gap-3 shrink-0">
                 <button onClick={() => { setScanResult(null); setIsManualEntry(false); }} className="flex-1 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all shadow-sm">Annulla</button>
                 <button onClick={handleInviaScheda} className="flex-[2] py-4 bg-green-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-green-600/30 active:scale-95 transition-all">Salva Scheda</button>
@@ -482,7 +489,7 @@ const Produzione: React.FC = () => {
                    }}
                    className="flex items-center gap-2 bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] shadow-xl active:scale-95"
                  >
-                   <AlertTriangle size={16} className="text-yellow-400" /> ANNULLA E INSERISCI A MANO
+                   <AlertTriangle size={16} className="text-yellow-400" /> ANNULLA E SCRIVI A MANO
                  </button>
                </div>
              )}
