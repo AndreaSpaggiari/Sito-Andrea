@@ -11,9 +11,59 @@ const Chat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [recipient, setRecipient] = useState<string>('ALL');
+  const [isAlerting, setIsAlerting] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Refs per gestione notifiche
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const titleIntervalRef = useRef<number | null>(null);
+  const originalTitle = useRef(document.title);
 
-  // Funzione di scroll sicura che non trascina la pagina intera
+  // Inizializza audio
+  useEffect(() => {
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+    audioRef.current.volume = 0.8;
+  }, []);
+
+  const triggerNotifications = () => {
+    // 1. Suono
+    if (audioRef.current) {
+      audioRef.current.play().catch(e => console.debug("Autoplay blocked or audio error"));
+    }
+
+    // 2. Pulse visivo
+    setIsAlerting(true);
+    setTimeout(() => setIsAlerting(false), 3000);
+
+    // 3. Tab Flash (se la finestra non è a fuoco)
+    if (!document.hasFocus()) {
+      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+      let showAlt = false;
+      titleIntervalRef.current = window.setInterval(() => {
+        document.title = showAlt ? "🔴 NUOVO MESSAGGIO!" : originalTitle.current;
+        showAlt = !showAlt;
+      }, 1000);
+    }
+
+    // 4. Vibrazione (Mobile/Tablet)
+    if ("vibrate" in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  };
+
+  // Reset titolo quando la finestra torna a fuoco
+  useEffect(() => {
+    const handleFocus = () => {
+      if (titleIntervalRef.current) {
+        clearInterval(titleIntervalRef.current);
+        titleIntervalRef.current = null;
+        document.title = originalTitle.current;
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (scrollContainerRef.current) {
       const { scrollHeight, clientHeight } = scrollContainerRef.current;
@@ -24,12 +74,10 @@ const Chat: React.FC = () => {
     }
   };
 
-  // Scroll al caricamento e ai nuovi messaggi
   useEffect(() => {
     scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth');
   }, [messages]);
 
-  // Initial Fetch & Real-time setup
   useEffect(() => {
     if (!username) return;
 
@@ -51,8 +99,16 @@ const Chat: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMessage = payload.new as ChatMessage;
-          if (newMessage.recipient_name === 'ALL' || newMessage.recipient_name === username || newMessage.sender_name === username) {
+          const forMe = newMessage.recipient_name === 'ALL' || newMessage.recipient_name === username;
+          const fromOther = newMessage.sender_name !== username;
+
+          if (forMe || newMessage.sender_name === username) {
             setMessages((prev) => [...prev, newMessage]);
+            
+            // Trigger notifiche solo se il messaggio è per me e inviato da altri
+            if (forMe && fromOther) {
+              triggerNotifications();
+            }
           }
         }
       )
@@ -88,6 +144,7 @@ const Chat: React.FC = () => {
     return () => {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(presenceChannel);
+      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
     };
   }, [username]);
 
@@ -96,6 +153,10 @@ const Chat: React.FC = () => {
     if (inputName.trim()) {
       setUsername(inputName.trim());
       localStorage.setItem('chat_username', inputName.trim());
+      // Interazione utente necessaria per sbloccare l'audio in alcuni browser
+      if (audioRef.current) {
+        audioRef.current.play().then(() => audioRef.current?.pause()).catch(() => {});
+      }
     }
   };
 
@@ -148,7 +209,7 @@ const Chat: React.FC = () => {
   }
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-2xl flex flex-col h-[650px] border border-slate-100 overflow-hidden relative">
+    <div className={`bg-white rounded-[2rem] shadow-2xl flex flex-col h-[650px] border-4 overflow-hidden relative transition-all duration-300 ${isAlerting ? 'border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.5)] animate-glow-pulse' : 'border-slate-100'}`}>
       {/* Header */}
       <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -264,6 +325,14 @@ const Chat: React.FC = () => {
       </div>
 
       <style>{`
+        @keyframes glow-pulse {
+          0% { box-shadow: 0 0 5px rgba(234, 179, 8, 0.4); }
+          50% { box-shadow: 0 0 30px rgba(234, 179, 8, 0.8); }
+          100% { box-shadow: 0 0 5px rgba(234, 179, 8, 0.4); }
+        }
+        .animate-glow-pulse {
+          animation: glow-pulse 1.5s infinite;
+        }
         .custom-scrollbar::-webkit-scrollbar {
           width: 4px;
         }
