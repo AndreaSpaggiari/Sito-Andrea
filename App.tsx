@@ -6,6 +6,10 @@ import Home from './pages/Home';
 import Pallamano from './pages/Pallamano';
 import Lavoro from './pages/Lavoro';
 import Produzione from './pages/Produzione';
+import Macchine from './pages/Macchine';
+import Magazzino from './pages/Magazzino';
+import Ufficio from './pages/Ufficio';
+import Utilita from './pages/Utilita';
 import Personale from './pages/Personale';
 import Login from './pages/Login';
 import Header from './components/Header';
@@ -94,14 +98,9 @@ const App: React.FC = () => {
       <main className="flex-grow">
         <Routes>
           <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-          
-          {/* HOME PAGE PUBBLICA */}
           <Route path="/" element={<Home profile={profile} session={session} onRefresh={refreshProfile} />} />
-          
-          {/* SEZIONE PALLAMANO PUBBLICA */}
           <Route path="/pallamano" element={<Pallamano profile={profile} />} />
           
-          {/* SEZIONI PROTETTE */}
           <Route path="/lavoro" element={
             <ProtectedRoute session={session} section="LAVORO" profile={profile}>
               <Lavoro />
@@ -111,6 +110,30 @@ const App: React.FC = () => {
           <Route path="/lavoro/produzione" element={
             <ProtectedRoute session={session} section="LAVORO" profile={profile}>
               <Produzione />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/macchine" element={
+            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+              <Macchine />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/magazzino" element={
+            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+              <Magazzino />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/ufficio" element={
+            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+              <Ufficio />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/utilita" element={
+            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+              <Utilita />
             </ProtectedRoute>
           } />
           

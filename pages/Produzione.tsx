@@ -59,7 +59,15 @@ const Produzione: React.FC = () => {
     try {
       const { data: m } = await supabase.from('l_macchine').select('*').order('macchina');
       const { data: f } = await supabase.from('l_fasi_di_lavorazione').select('*').order('fase_di_lavorazione');
-      if (m) setMacchine(m);
+      
+      // Filtriamo le macchine escluse: CASSONE, UFFICIO, MAGAZZINO, IMBALLAGGIO
+      const escluse = ['CASSONE', 'UFFICIO', 'MAGAZZINO', 'IMBALLAGGIO'];
+      const filtrate = (m || []).filter(item => 
+        !escluse.includes(item.macchina.toUpperCase()) && 
+        !escluse.includes(item.id_macchina.toUpperCase())
+      );
+
+      setMacchine(filtrate);
       if (f) setFasi(f);
       setMetaLoaded(true);
     } catch (e) { console.error(e); }
@@ -98,14 +106,17 @@ const Produzione: React.FC = () => {
   }, [fetchMeta, fetchMagazzino]);
 
   useEffect(() => {
-    if (metaLoaded && !selectedMacchina) {
-      setShowMacchinaPicker(true);
+    // Se i metadati sono caricati e la macchina selezionata non è presente tra quelle filtrate, apriamo il selettore
+    if (metaLoaded) {
+      const isSelectedValid = macchine.some(m => m.id_macchina === selectedMacchina);
+      if (!selectedMacchina || !isSelectedValid) {
+        setShowMacchinaPicker(true);
+      }
     }
-  }, [metaLoaded, selectedMacchina]);
+  }, [metaLoaded, selectedMacchina, macchine]);
 
   useEffect(() => { fetchLavorazioni(); }, [fetchLavorazioni]);
 
-  // Funzione per aggiornare lo stato (es. da ATT a PRE o da PRE a ATT)
   const updateStatoLavorazione = async (id: string, nuovoStato: Stati) => {
     setLoading(true);
     setLoadingMsg('AGGIORNAMENTO STATO...');
