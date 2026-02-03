@@ -13,50 +13,69 @@ interface Props {
 const Header: React.FC<Props> = ({ profile, session }) => {
   const location = useLocation();
 
+  const getThemeColor = () => {
+    if (location.pathname.includes('pallamano')) return 'bg-blue-600';
+    if (location.pathname.includes('lavoro')) return 'bg-amber-600';
+    if (location.pathname.includes('personale')) return 'bg-emerald-600';
+    return 'bg-slate-950';
+  };
+
   const handleLogout = () => supabase.auth.signOut();
 
   return (
-    <header className="bg-[#e67e22] text-white shadow-xl p-4 sticky top-0 z-50 border-b border-white/10">
+    <header className={`${getThemeColor()} text-white shadow-xl p-4 transition-colors duration-500 sticky top-0 z-50 border-b border-white/10 backdrop-blur-md`}>
       <div className="container mx-auto flex justify-between items-center px-2">
-        <Link to="/" className="text-xl font-bold flex items-center gap-3 group">
-          <div className="p-2 bg-white/20 rounded-xl">
+        <Link to="/" className="text-xl font-bold flex items-center gap-2 group">
+          <div className="p-2 bg-white/10 rounded-xl group-hover:bg-white/20 transition-all group-hover:scale-110">
             <Home size={18} />
           </div>
-          <span className="font-black tracking-tighter uppercase text-base italic">ANDREA <span className="text-white/80 font-medium">SPAGGIARI</span></span>
+          <span className="hidden sm:inline font-black tracking-tighter uppercase text-base italic">ANDREA <span className="text-white/60">SPAGGIARI</span></span>
         </Link>
         
-        <nav className="flex items-center gap-6">
-          <div className="hidden lg:flex gap-8">
-            <Link to="/pallamano" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname === '/pallamano' ? 'border-b-2 border-white pb-1' : ''}`}>
+        <nav className="flex items-center gap-4 md:gap-8">
+          <div className="hidden md:flex gap-8">
+            <Link to="/pallamano" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname === '/pallamano' ? 'underline underline-offset-[12px] decoration-4' : ''}`}>
               <Trophy size={14} /> PALLAMANO
             </Link>
-            <Link to="/lavoro" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname.startsWith('/lavoro') ? 'border-b-2 border-white pb-1' : ''}`}>
+            <Link to="/lavoro" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname.startsWith('/lavoro') ? 'underline underline-offset-[12px] decoration-4' : ''}`}>
               <Briefcase size={14} /> LAVORO
             </Link>
-            <Link to="/personale" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname === '/personale' ? 'border-b-2 border-white pb-1' : ''}`}>
+            <Link to="/personale" className={`flex items-center gap-2 hover:opacity-80 transition font-black text-[10px] uppercase tracking-widest ${location.pathname === '/personale' ? 'underline underline-offset-[12px] decoration-4' : ''}`}>
               <User size={14} /> PERSONALE
             </Link>
           </div>
 
-          {session ? (
-            <div className="flex items-center gap-4 border-l border-white/20 pl-6">
-              <div className="bg-white rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-sm">
-                {profile?.role === 'ADMIN' && (
-                  <span className="bg-slate-900 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase flex items-center gap-1">
-                    <Shield size={8} /> ADMIN
+          {(profile || session) ? (
+            <div className="flex items-center gap-4 pl-6 border-l border-white/20">
+              <div className="flex flex-col items-end">
+                <div className="flex items-center gap-2">
+                  {!profile ? (
+                    <span className="bg-white/10 text-white/50 text-[8px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-1">
+                      <Loader2 size={8} className="animate-spin" /> SYNC
+                    </span>
+                  ) : profile.role === 'ADMIN' ? (
+                    <span className="bg-white text-slate-900 text-[8px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-1 shadow-lg">
+                      <Shield size={8} /> ADMIN
+                    </span>
+                  ) : (
+                    <span className="bg-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-1">
+                      <UserCheck size={8} /> USER
+                    </span>
+                  )}
+                  <span className="text-[11px] font-black uppercase tracking-tighter italic">
+                    {profile?.username || session?.user?.email?.split('@')[0]}
                   </span>
-                )}
-                <span className="text-slate-900 text-[11px] font-black uppercase italic tracking-tighter">
-                  {profile?.username || session?.user?.email?.split('@')[0]}
-                </span>
-                <button onClick={handleLogout} className="text-slate-400 hover:text-rose-500 transition-colors ml-1">
-                  <LogOut size={14} />
+                </div>
+                <button onClick={handleLogout} className="text-[9px] font-black text-white/50 hover:text-white uppercase tracking-widest flex items-center gap-1 transition-colors mt-0.5">
+                  <LogOut size={8} /> Logout
                 </button>
               </div>
             </div>
           ) : (
-            <Link to="/login" className="bg-white text-slate-900 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-              Login
+            <Link to="/login" className="flex items-center gap-3 bg-white text-slate-900 hover:bg-blue-50 px-5 py-2.5 rounded-2xl transition-all font-black text-[10px] uppercase tracking-[0.1em] shadow-lg shadow-black/20 group active:scale-95">
+              <LogIn size={14} className="group-hover:rotate-12 transition-transform" /> 
+              <span>Area Riservata</span>
+              <ChevronRight size={12} className="opacity-40" />
             </Link>
           )}
         </nav>
