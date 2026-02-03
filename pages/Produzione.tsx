@@ -12,7 +12,7 @@ import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, CheckCircle2, PlayCircle, X, 
   Laptop, ClipboardList, Ruler, Activity, Plus, Layers, Hash, Settings2,
-  CheckCircle, Scale, Weight, Inbox, Calendar, Tag, Info
+  CheckCircle, Scale, Weight, Inbox, Calendar, Tag, Info, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const formatDateForDisplay = (dateStr: string | null) => {
@@ -41,6 +41,9 @@ const Produzione: React.FC = () => {
   const [lavorazioni, setLavorazioni] = useState<Lavorazione[]>([]);
   const [magazzino, setMagazzino] = useState<Lavorazione[]>([]);
   
+  // Filtro Data
+  const [filterDate, setFilterDate] = useState(formatDate(new Date()));
+
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('CARICAMENTO...');
   const [metaLoaded, setMetaLoaded] = useState(false);
@@ -77,6 +80,7 @@ const Produzione: React.FC = () => {
     if (!selectedMacchina) return;
     if (showLoader) { setLoading(true); setLoadingMsg('SINCRONIZZAZIONE...'); }
     try {
+      // Recuperiamo tutte le lavorazioni della macchina per gestire il filtro data localmente
       const { data } = await supabase
         .from('l_lavorazioni')
         .select(`*, l_clienti:id_cliente (*), l_macchine:id_macchina (*), l_fasi_di_lavorazione:id_fase (*)`)
@@ -156,9 +160,12 @@ const Produzione: React.FC = () => {
   };
 
   const proItems = useMemo(() => 
-    lavorazioni.filter(l => l.id_stato === Stati.PRO || (l.id_stato === Stati.TER && l.fine_lavorazione?.startsWith(formatDate(new Date()))))
+    lavorazioni.filter(l => 
+      l.id_stato === Stati.PRO || 
+      (l.id_stato === Stati.TER && l.fine_lavorazione?.startsWith(filterDate))
+    )
     .sort((a,b) => a.id_stato === b.id_stato ? 0 : a.id_stato === Stati.PRO ? -1 : 1),
-    [lavorazioni]
+    [lavorazioni, filterDate]
   );
 
   const attItems = useMemo(() => {
@@ -171,6 +178,14 @@ const Produzione: React.FC = () => {
     });
   }, [lavorazioni, sortCriteria]);
 
+  const changeDate = (days: number) => {
+    const current = new Date(filterDate);
+    current.setDate(current.getDate() + days);
+    setFilterDate(formatDate(current));
+  };
+
+  const isToday = filterDate === formatDate(new Date());
+
   const currentMacchinaName = useMemo(() => {
     return macchine.find(m => m.id_macchina === selectedMacchina)?.macchina || 'POSTAZIONE';
   }, [macchine, selectedMacchina]);
@@ -180,23 +195,55 @@ const Produzione: React.FC = () => {
       <div className="w-full max-w-[1700px] mx-auto p-4 flex flex-col lg:flex-row gap-6">
         
         <div className="flex-1 space-y-6 min-w-0">
-          {/* Header Macchina Pulito */}
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-            <div className="flex items-center gap-4">
+          {/* Header Macchina + Selettore Data */}
+          <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4 w-full md:w-auto">
               <Link to="/lavoro" className="p-2 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200 transition-all"><ArrowLeft size={20} /></Link>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">KME INDUSTRIAL HUB</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">KME HUB</span>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight italic">{currentMacchinaName}</h1>
-                  <button onClick={() => setShowMacchinaPicker(true)} className="p-2 bg-blue-600 text-white rounded-lg shadow-lg hover:scale-110 active:scale-90 transition-all ml-2">
-                    <Settings2 size={16} />
+                  <button onClick={() => setShowMacchinaPicker(true)} className="p-2 bg-blue-600 text-white rounded-lg shadow-lg hover:scale-110 active:scale-90 transition-all ml-1">
+                    <Settings2 size={14} />
                   </button>
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
-               <button onClick={() => { fetchMagazzino(); setShowMagazzinoPicker(true); }} className="px-6 py-3 bg-[#0f172a] text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-3 active:scale-95 transition-all">
-                  <Inbox size={18} /> PRELEVA DA MAGAZZINO
+
+            {/* SELETTORE DATA AVANZATO */}
+            <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+               <button onClick={() => changeDate(-1)} className="p-2 hover:bg-white rounded-xl text-slate-500 hover:text-blue-600 transition-all active:scale-90">
+                  <ChevronLeft size={20} />
+               </button>
+               
+               <div className="px-4 flex items-center gap-3">
+                  <div className="relative flex items-center">
+                    <Calendar size={16} className="absolute left-3 text-blue-600 pointer-events-none" />
+                    <input 
+                      type="date" 
+                      value={filterDate} 
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-[11px] font-black uppercase text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                    />
+                  </div>
+                  {!isToday && (
+                    <button 
+                      onClick={() => setFilterDate(formatDate(new Date()))}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95"
+                    >
+                      Oggi
+                    </button>
+                  )}
+               </div>
+
+               <button onClick={() => changeDate(1)} className="p-2 hover:bg-white rounded-xl text-slate-500 hover:text-blue-600 transition-all active:scale-90">
+                  <ChevronRight size={20} />
+               </button>
+            </div>
+
+            <div className="flex gap-2 w-full md:w-auto">
+               <button onClick={() => { fetchMagazzino(); setShowMagazzinoPicker(true); }} className="flex-1 md:flex-none px-5 py-3 bg-[#0f172a] text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+                  <Inbox size={16} /> PRELEVA
                </button>
                <button onClick={() => fetchLavorazioni(true)} className="p-3 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 transition-all">
                   <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
@@ -206,11 +253,16 @@ const Produzione: React.FC = () => {
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
             
-            {/* SEZIONE IN LAVORAZIONE (AZZURRO E VERDE) */}
+            {/* SEZIONE IN LAVORAZIONE (SX) */}
             <div className="bg-[#1e293b] rounded-[2.5rem] shadow-2xl border border-slate-800 overflow-hidden">
               <div className="px-6 py-4 flex justify-between items-center border-b border-white/5">
-                <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white"><Activity size={16} className="text-blue-500"/> IN LAVORAZIONE</span>
-                <span className="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-black">{proItems.filter(i=>i.id_stato===Stati.PRO).length}</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white">
+                    <Activity size={16} className="text-blue-500"/> PRODUZIONE GIORNALIERA
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase mt-1 tracking-widest italic">{isToday ? 'STATO ATTUALE' : `LOG DEL ${formatDateForDisplay(filterDate)}`}</span>
+                </div>
+                <span className="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-black">{proItems.length}</span>
               </div>
               <div className="p-4 space-y-4">
                 {proItems.map(l => {
@@ -261,12 +313,12 @@ const Produzione: React.FC = () => {
                   );
                 })}
                 {proItems.length === 0 && (
-                   <div className="py-20 text-center text-slate-500 italic uppercase font-black text-[10px] tracking-[0.3em]">Nessuna lavorazione attiva</div>
+                   <div className="py-20 text-center text-slate-500 italic uppercase font-black text-[10px] tracking-[0.3em]">Nessuna lavorazione registrata per questa data</div>
                 )}
               </div>
             </div>
 
-            {/* SEZIONE IN ATTESA (ARANCIO) */}
+            {/* SEZIONE IN ATTESA (DX) */}
             <div className="bg-[#d97706] rounded-[2.5rem] shadow-2xl border border-amber-700 overflow-hidden">
               <div className="px-6 py-4 flex justify-between items-center border-b border-white/10">
                 <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white"><ClipboardList size={16}/> CODA ATTESA</span>

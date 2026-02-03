@@ -31,9 +31,14 @@ const Chat: React.FC = () => {
     if (!username) return;
 
     const fetchMessages = async () => {
+      // Calcoliamo l'inizio della giornata odierna (00:00:00)
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
       const { data } = await supabase
         .from('messages')
         .select('*')
+        .gte('created_at', startOfToday) // Filtro: Solo messaggi di oggi
         .order('created_at', { ascending: true })
         .limit(100);
       
@@ -48,6 +53,7 @@ const Chat: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMessage = payload.new as ChatMessage;
+          // Verifica se il messaggio appartiene alla conversazione (pubblico o privato per me)
           if (newMessage.recipient_name === 'ALL' || newMessage.recipient_name === username || newMessage.sender_name === username) {
             setMessages((prev) => [...prev, newMessage]);
           }
@@ -169,7 +175,7 @@ const Chat: React.FC = () => {
       </div>
 
       <div className="flex flex-grow overflow-hidden bg-white min-h-0">
-        {/* Sidebar Destinatari (Solo Desktop) */}
+        {/* Sidebar Destinatari */}
         <div className="w-24 sm:w-32 bg-slate-50/50 border-r border-slate-100 p-3 overflow-y-auto hidden md:block shrink-0">
           <p className="text-[8px] font-black text-slate-400 mb-4 uppercase tracking-widest px-1">Canale</p>
           <div className="space-y-1">
@@ -235,6 +241,12 @@ const Chat: React.FC = () => {
                 </div>
               );
             })}
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-slate-300 space-y-2 opacity-50">
+                 <MessageSquare size={32} />
+                 <p className="text-[10px] font-black uppercase tracking-widest">Inizia la chat di oggi</p>
+              </div>
+            )}
             <div className="h-2"></div>
           </div>
 
