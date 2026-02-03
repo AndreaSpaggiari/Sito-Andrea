@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Navigate, Link } from 'react-router-dom';
-import { supabase } from '../supabaseClient.ts';
-import { UserProfile, SectionType, PermissionStatus } from '../types.ts';
+import { supabase } from '../supabaseClient';
+import { UserProfile, SectionType, PermissionStatus } from '../types';
 import { Lock, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -22,6 +22,7 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
       return;
     }
     
+    // Gli admin hanno sempre accesso immediato
     if (profile.role === 'ADMIN') {
       setPermission('AUTORIZZATO');
       setLoading(false);
@@ -62,6 +63,7 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, profile }
     );
   }
 
+  // Se è richiesta una sezione specifica e l'utente non è autorizzato (e non è admin)
   if (section && permission !== 'AUTORIZZATO' && profile?.role !== 'ADMIN') {
     return <AccessDeniedScreen section={section} status={permission} userId={session.user.id} onRefresh={checkPermission} />;
   }

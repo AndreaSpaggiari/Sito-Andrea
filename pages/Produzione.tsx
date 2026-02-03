@@ -1,91 +1,77 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { 
   Lavorazione, 
   Macchina, 
   FaseLavorazione, 
-  Stati,
-  Cliente
+  Stati
 } from '../types';
-import { processLabelImage } from '../geminiService';
 import Chat from '../components/Chat';
 import { 
-  ArrowLeft, RefreshCw, Camera, Upload, Keyboard, CheckCircle2, PlayCircle, X, 
-  Laptop, ClipboardList, Ruler, Activity, AlertTriangle, Search, Plus
+  ArrowLeft, RefreshCw, CheckCircle2, PlayCircle, X, 
+  Laptop, ClipboardList, Ruler, Activity, Plus, Layers, Hash, Settings2,
+  CheckCircle, Scale, Weight, Inbox, Calendar, Tag, Info
 } from 'lucide-react';
 
+const formatDateForDisplay = (dateStr: string | null) => {
+  if (!dateStr) return 'N/D';
+  try {
+    const date = new Date(dateStr);
+    const months = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = months[date.getMonth()];
+    return `${day} ${month}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
-const formatShortDate = (dateStr: string | null) => {
-  if (!dateStr) return '--';
-  const parts = dateStr.split('-');
-  return parts.length >= 3 ? `${parts[2]}-${parts[1]}` : dateStr;
-};
-
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
-const compressImage = (base64: string, maxWidth = 1600, quality = 0.85): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.src = `data:image/jpeg;base64,${base64}`;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > maxWidth) {
-        height = (maxWidth / width) * height;
-        width = maxWidth;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
-    };
-    img.onerror = () => reject(new Error("Errore caricamento immagine"));
-  });
-};
-
-type SortCriteria = 'scheda' | 'cliente' | 'data' | 'misura';
 
 const Produzione: React.FC = () => {
-  const [selectedMacchina, setSelectedMacchina] = useState<string | null>(localStorage.getItem('kme_selected_macchina'));
+  const [selectedMacchina, setSelectedMacchina] = useState<string | null>(() => {
+    const saved = localStorage.getItem('kme_selected_macchina');
+    return (saved && saved !== 'null' && saved !== 'undefined') ? saved : null;
+  });
+  
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [fasi, setFasi] = useState<FaseLavorazione[]>([]);
-  const [clienti, setClienti] = useState<Cliente[]>([]);
   const [lavorazioni, setLavorazioni] = useState<Lavorazione[]>([]);
+  const [magazzino, setMagazzino] = useState<Lavorazione[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('CARICAMENTO...');
-  const [scanResult, setScanResult] = useState<any>(null);
-  const [showMacchinaPicker, setShowMacchinaPicker] = useState(!selectedMacchina);
+  const [metaLoaded, setMetaLoaded] = useState(false);
+  
+  const [showMacchinaPicker, setShowMacchinaPicker] = useState(false);
+  const [showMagazzinoPicker, setShowMagazzinoPicker] = useState(false);
   const [showFasePicker, setShowFasePicker] = useState<{ id: string } | null>(null);
   const [showTerminaPicker, setShowTerminaPicker] = useState<Lavorazione | null>(null);
-  const [showScanOptions, setShowScanOptions] = useState(false);
-  const [sortCriteria, setSortCriteria] = useState<SortCriteria>('scheda');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [sortCriteria, setSortCriteria] = useState<'scheda' | 'cliente' | 'data' | 'misura'>('scheda');
 
   const fetchMeta = useCallback(async () => {
     try {
       const { data: m } = await supabase.from('l_macchine').select('*').order('macchina');
       const { data: f } = await supabase.from('l_fasi_di_lavorazione').select('*').order('fase_di_lavorazione');
-      const { data: c } = await supabase.from('l_clienti').select('*').order('cliente');
-      if (m) setMacchine(m);
+      if (m) setMacchine(m.filter(item => item.id_macchina !== 'MAG'));
       if (f) setFasi(f);
-      if (c) setClienti(c);
+      setMetaLoaded(true);
     } catch (e) { console.error(e); }
   }, []);
 
-  useEffect(() => { fetchMeta(); }, [fetchMeta]);
+  const fetchMagazzino = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('l_lavorazioni')
+        .select(`*, l_clienti:id_cliente (*)`)
+        .eq('id_macchina', 'MAG')
+        .eq('id_fase', 'ATT')
+        .eq('id_stato', 'ATT');
+      if (data) setMagazzino(data);
+    } catch (e) { console.error(e); }
+  }, []);
 
   const fetchLavorazioni = useCallback(async (showLoader = true) => {
     if (!selectedMacchina) return;
@@ -100,349 +86,439 @@ const Produzione: React.FC = () => {
     finally { if (showLoader) setLoading(false); }
   }, [selectedMacchina]);
 
+  useEffect(() => { 
+    fetchMeta(); 
+    fetchMagazzino();
+  }, [fetchMeta, fetchMagazzino]);
+
+  useEffect(() => {
+    if (metaLoaded && !selectedMacchina) {
+      setShowMacchinaPicker(true);
+    }
+  }, [metaLoaded, selectedMacchina]);
+
   useEffect(() => { fetchLavorazioni(); }, [fetchLavorazioni]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLoading(true); setLoadingMsg('ELABORAZIONE FOTO...'); setShowScanOptions(false);
-    try {
-      const base64Raw = await blobToBase64(file);
-      const compressed = await compressImage(base64Raw);
-      setLoadingMsg('ANALISI IA KME...');
-      const data = await processLabelImage(compressed);
-      setScanResult(data);
-    } catch (err: any) {
-      alert("Errore IA: " + err.message);
-      setScanResult({ scheda: '', cliente: '', misura: '', ordine_kg_richiesto: '', data_consegna: formatDate(new Date()) });
-    } finally { setLoading(false); }
-  };
-
-  const handleInviaScheda = async () => {
-    if (!scanResult || !selectedMacchina) return;
+  const assegnaSchedaAMacchina = async (scheda: Lavorazione) => {
+    if (!selectedMacchina) return;
     setLoading(true);
+    setLoadingMsg('ASSEGNAZIONE...');
     try {
-      const nomeCliente = scanResult.cliente.toUpperCase().trim();
-      const safeId = nomeCliente.replace(/[^A-Z0-9]/g, '_').substring(0, 30);
-      await supabase.from('l_clienti').upsert({ id_cliente: safeId, cliente: nomeCliente }, { onConflict: 'id_cliente' });
+      const { error } = await supabase
+        .from('l_lavorazioni')
+        .update({ id_macchina: selectedMacchina })
+        .eq('id_lavorazione', scheda.id_lavorazione);
       
-      const payload = {
-        id_macchina: selectedMacchina, id_fase: 'ATT', id_stato: Stati.ATT,
-        scheda: parseInt(scanResult.scheda) || 0, id_cliente: safeId,
-        ordine_kg_richiesto: parseInt(scanResult.ordine_kg_richiesto) || 0,
-        misura: parseFloat(scanResult.misura) || 0,
-        attesa_lavorazione: new Date().toISOString(),
-        data_consegna: scanResult.data_consegna || null,
-        mcoil: (scanResult.mcoil || 'N/D').toUpperCase(),
-        mcoil_kg: parseFloat(scanResult.mcoil_kg) || 0,
-        spessore: parseFloat(scanResult.spessore) || 0,
-        mcoil_larghezza: parseInt(scanResult.mcoil_larghezza) || 0,
-        mcoil_lega: (scanResult.mcoil_lega || 'RAME').toUpperCase()
-      };
-      const { error } = await supabase.from('l_lavorazioni').insert(payload);
       if (error) throw error;
-      setScanResult(null); fetchLavorazioni(false);
-    } catch (err: any) { alert(err.message); } finally { setLoading(false); }
+      
+      setShowMagazzinoPicker(false);
+      await fetchMagazzino();
+      await fetchLavorazioni(false);
+    } catch (err: any) {
+      alert("Errore: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const startLavorazione = async (id: string, faseId: string) => {
     setLoading(true);
-    await supabase.from('l_lavorazioni').update({ 
-      id_fase: faseId, id_stato: Stati.PRO, inizio_lavorazione: new Date().toISOString() 
-    }).eq('id_lavorazione', id);
-    setShowFasePicker(null); fetchLavorazioni(false); setLoading(false);
+    setLoadingMsg('AVVIO...');
+    try {
+      const { error } = await supabase
+        .from('l_lavorazioni')
+        .update({ id_fase: faseId, id_stato: Stati.PRO, inizio_lavorazione: new Date().toISOString() })
+        .eq('id_lavorazione', id);
+      if (error) throw error;
+      setShowFasePicker(null);
+      await fetchLavorazioni(false);
+    } catch (err: any) { alert(err.message); }
+    finally { setLoading(false); }
   };
 
-  const finishLavorazione = async (l: Lavorazione, kg: number, metri: number) => {
+  const finishLavorazione = async (l: Lavorazione, kg: number, metri: number, nastri: number, pezzi: number) => {
     setLoading(true);
-    await supabase.from('l_lavorazioni').update({ 
-      id_stato: Stati.TER, fine_lavorazione: new Date().toISOString(),
-      ordine_kg_lavorato: Math.round(kg), metri_avvolti: Math.round(metri)
-    }).eq('id_lavorazione', l.id_lavorazione);
-    setShowTerminaPicker(null); fetchLavorazioni(false); setLoading(false);
+    setLoadingMsg('COMPLETAMENTO...');
+    try {
+      const { error } = await supabase
+        .from('l_lavorazioni')
+        .update({ 
+          id_stato: Stati.TER, fine_lavorazione: new Date().toISOString(),
+          ordine_kg_lavorato: kg, metri_avvolti: metri,
+          numero_passate: nastri, numero_pezzi: pezzi
+        })
+        .eq('id_lavorazione', l.id_lavorazione);
+      if (error) throw error;
+      setShowTerminaPicker(null);
+      await fetchLavorazioni(false);
+    } catch (err: any) { alert(err.message); }
+    finally { setLoading(false); }
   };
 
-  const proItems = useMemo(() => {
-    const today = formatDate(new Date());
-    return lavorazioni
-      .filter(l => l.id_stato === Stati.PRO || (l.id_stato === Stati.TER && l.fine_lavorazione?.startsWith(today)))
-      .sort((a, b) => (a.id_stato === b.id_stato ? 0 : a.id_stato === Stati.PRO ? -1 : 1));
-  }, [lavorazioni]);
+  const proItems = useMemo(() => 
+    lavorazioni.filter(l => l.id_stato === Stati.PRO || (l.id_stato === Stati.TER && l.fine_lavorazione?.startsWith(formatDate(new Date()))))
+    .sort((a,b) => a.id_stato === b.id_stato ? 0 : a.id_stato === Stati.PRO ? -1 : 1),
+    [lavorazioni]
+  );
 
   const attItems = useMemo(() => {
-    return lavorazioni.filter(l => l.id_stato === Stati.ATT).sort((a, b) => {
+    const filtered = lavorazioni.filter(l => l.id_stato === Stati.ATT);
+    return [...filtered].sort((a, b) => {
       if (sortCriteria === 'cliente') return (a.l_clienti?.cliente || '').localeCompare(b.l_clienti?.cliente || '');
-      if (sortCriteria === 'data') return (a.data_consegna || '9').localeCompare(b.data_consegna || '9');
+      if (sortCriteria === 'data') return (a.data_consegna || '').localeCompare(b.data_consegna || '');
       if (sortCriteria === 'misura') return (a.misura || 0) - (b.misura || 0);
-      return (a.scheda || 0) - (b.scheda || 0);
+      return a.scheda - b.scheda;
     });
   }, [lavorazioni, sortCriteria]);
 
+  const currentMacchinaName = useMemo(() => {
+    return macchine.find(m => m.id_macchina === selectedMacchina)?.macchina || 'POSTAZIONE';
+  }, [macchine, selectedMacchina]);
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <div className="w-full max-w-[1600px] mx-auto p-4 flex flex-col lg:flex-row gap-6">
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900">
+      <div className="w-full max-w-[1700px] mx-auto p-4 flex flex-col lg:flex-row gap-6">
         
-        {/* Sinistra: Tabelle */}
         <div className="flex-1 space-y-6 min-w-0">
-          
-          {/* Header Postazione */}
-          <div className="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+          {/* Header Macchina Pulito */}
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <Link to="/lavoro" className="p-2 bg-slate-100 rounded-lg text-slate-500 hover:bg-slate-200"><ArrowLeft size={20} /></Link>
-              <h1 className="text-xl font-bold text-slate-900 uppercase">
-                {macchine.find(m => m.id_macchina === selectedMacchina)?.macchina || 'POSTAZIONE'}
-              </h1>
+              <Link to="/lavoro" className="p-2 bg-slate-100 rounded-lg text-slate-700 hover:bg-slate-200 transition-all"><ArrowLeft size={20} /></Link>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">KME INDUSTRIAL HUB</span>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight italic">{currentMacchinaName}</h1>
+                  <button onClick={() => setShowMacchinaPicker(true)} className="p-2 bg-blue-600 text-white rounded-lg shadow-lg hover:scale-110 active:scale-90 transition-all ml-2">
+                    <Settings2 size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
-            <button onClick={() => fetchLavorazioni(true)} className="p-2 bg-blue-600 text-white rounded-lg shadow active:scale-95">
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <div className="flex gap-2">
+               <button onClick={() => { fetchMagazzino(); setShowMagazzinoPicker(true); }} className="px-6 py-3 bg-[#0f172a] text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-3 active:scale-95 transition-all">
+                  <Inbox size={18} /> PRELEVA DA MAGAZZINO
+               </button>
+               <button onClick={() => fetchLavorazioni(true)} className="p-3 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 transition-all">
+                  <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+               </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
             
-            {/* Tabella In Produzione */}
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-              <div className="bg-blue-600 px-4 py-3 text-white flex justify-between items-center">
-                <span className="text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> In Corso / Finiti</span>
-                <span className="bg-white/20 px-2 py-0.5 rounded-md text-[10px] font-bold">{proItems.length}</span>
+            {/* SEZIONE IN LAVORAZIONE (AZZURRO E VERDE) */}
+            <div className="bg-[#1e293b] rounded-[2.5rem] shadow-2xl border border-slate-800 overflow-hidden">
+              <div className="px-6 py-4 flex justify-between items-center border-b border-white/5">
+                <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white"><Activity size={16} className="text-blue-500"/> IN LAVORAZIONE</span>
+                <span className="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-black">{proItems.filter(i=>i.id_stato===Stati.PRO).length}</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left w-10">ST</th>
-                      <th className="px-2 py-3 text-left">Scheda / Cliente</th>
-                      <th className="px-2 py-3 text-center">KG</th>
-                      <th className="px-2 py-3 text-center">MIS</th>
-                      <th className="px-4 py-3 text-right">Azione</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {proItems.map(l => (
-                      <tr key={l.id_lavorazione} className={l.id_stato === Stati.PRO ? 'bg-blue-50/30' : 'bg-emerald-50/20'}>
-                        <td className="px-4 py-3">
-                          <div className={`w-2 h-2 rounded-full mx-auto ${l.id_stato === Stati.PRO ? 'bg-blue-600 animate-pulse' : 'bg-emerald-500'}`} />
-                        </td>
-                        <td className="px-2 py-3">
-                          <div className="font-bold text-slate-900 leading-none">{l.scheda}</div>
-                          <div className="text-[10px] text-slate-500 uppercase truncate max-w-[120px]">{l.l_clienti?.cliente}</div>
-                        </td>
-                        <td className="px-2 py-3 text-center font-medium text-slate-700">{l.ordine_kg_richiesto}</td>
-                        <td className="px-2 py-3 text-center font-bold text-blue-600">{l.misura}</td>
-                        <td className="px-4 py-3 text-right">
-                          {l.id_stato === Stati.PRO ? (
-                            <button onClick={() => setShowTerminaPicker(l)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm active:scale-95">
-                              <CheckCircle2 size={16} />
-                            </button>
-                          ) : (
-                            <span className="text-emerald-500 font-bold text-[10px]">OK</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-4 space-y-4">
+                {proItems.map(l => {
+                  const isPro = l.id_stato === Stati.PRO;
+                  return (
+                    <div key={l.id_lavorazione} className={`relative flex items-center justify-between p-5 rounded-3xl transition-all shadow-lg ${isPro ? 'bg-sky-500 border-l-[12px] border-l-sky-800' : 'bg-emerald-500 border-l-[12px] border-l-emerald-800'}`}>
+                      <div className="flex items-center gap-6">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-black text-slate-950 text-2xl italic leading-none">{l.scheda}</h4>
+                            <div className="flex gap-1">
+                               <span className="bg-white/30 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.mcoil_lega || 'RAME'}</span>
+                               {l.spessore && <span className="bg-white/30 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.spessore}</span>}
+                               <span className="bg-white/30 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.mcoil}</span>
+                            </div>
+                          </div>
+                          <p className="text-lg font-black text-slate-950 uppercase mt-1 truncate max-w-[280px] leading-tight tracking-tight">{l.l_clienti?.cliente}</p>
+                          <div className="flex gap-3 mt-2.5 items-center">
+                            <span className="bg-white/20 px-2 py-1 rounded text-[10px] font-black text-slate-950 uppercase flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+                               <Calendar size={12} className="text-slate-900" /> {formatDateForDisplay(l.data_consegna)}
+                            </span>
+                            <span className="bg-slate-900/10 px-2.5 py-1.5 rounded-lg text-[9px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
+                               <Info size={11} /> {l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'ATTESA'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-8">
+                        <div className="text-center">
+                          <span className="text-[10px] font-black text-slate-800 uppercase block leading-none mb-1.5">PESO KG</span>
+                          <span className="text-2xl font-black text-slate-950 tabular-nums leading-none">
+                            {l.ordine_kg_richiesto} <span className="text-slate-900/30 mx-1">-</span> <span className="text-slate-900/60">{l.ordine_kg_lavorato || '...'}</span>
+                          </span>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[10px] font-black text-slate-800 uppercase block leading-none mb-1.5">MISURA</span>
+                          <span className="text-2xl font-black text-slate-950 italic leading-none">{l.misura}</span>
+                        </div>
+                        {isPro ? (
+                          <button onClick={() => setShowTerminaPicker(l)} className="p-4 bg-white text-sky-900 rounded-2xl hover:bg-sky-50 shadow-2xl active:scale-95 border-2 border-sky-600 transition-all">
+                            <CheckCircle2 size={24} />
+                          </button>
+                        ) : (
+                          <div className="bg-white/50 px-6 py-4 rounded-2xl text-emerald-950 font-black text-xs border-2 border-emerald-700 shadow-sm uppercase tracking-widest italic">OK</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {proItems.length === 0 && (
+                   <div className="py-20 text-center text-slate-500 italic uppercase font-black text-[10px] tracking-[0.3em]">Nessuna lavorazione attiva</div>
+                )}
               </div>
             </div>
 
-            {/* Tabella In Attesa */}
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-              <div className="bg-slate-800 px-4 py-2 flex justify-between items-center">
-                <span className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2"><ClipboardList size={14}/> In Coda</span>
+            {/* SEZIONE IN ATTESA (ARANCIO) */}
+            <div className="bg-[#d97706] rounded-[2.5rem] shadow-2xl border border-amber-700 overflow-hidden">
+              <div className="px-6 py-4 flex justify-between items-center border-b border-white/10">
+                <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-white"><ClipboardList size={16}/> CODA ATTESA</span>
                 <div className="flex gap-1">
-                  {['scheda', 'cliente', 'misura'].map(c => (
-                    <button key={c} onClick={() => setSortCriteria(c as any)} className={`px-2 py-1 rounded text-[8px] font-bold uppercase ${sortCriteria === c ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/50'}`}>{c}</button>
+                  {['scheda', 'cliente', 'misura', 'data'].map(c => (
+                    <button key={c} onClick={() => setSortCriteria(c as any)} className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${sortCriteria === c ? 'bg-white text-amber-600 shadow-md' : 'bg-amber-500 text-white hover:bg-amber-400'}`}>{c}</button>
                   ))}
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left w-10">ST</th>
-                      <th className="px-2 py-3 text-left">Scheda / Cliente</th>
-                      <th className="px-2 py-3 text-center">CONS.</th>
-                      <th className="px-2 py-3 text-center">KG</th>
-                      <th className="px-4 py-3 text-right">Azione</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {attItems.map(l => (
-                      <tr key={l.id_lavorazione} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3"><div className="w-2 h-2 rounded-full mx-auto bg-amber-400" /></td>
-                        <td className="px-2 py-3">
-                          <div className="font-bold text-slate-900 leading-none">{l.scheda}</div>
-                          <div className="text-[10px] text-slate-500 uppercase truncate max-w-[120px]">{l.l_clienti?.cliente}</div>
-                        </td>
-                        <td className="px-2 py-3 text-center text-[10px] font-bold text-red-500">{formatShortDate(l.data_consegna)}</td>
-                        <td className="px-2 py-3 text-center font-medium text-slate-700">{l.ordine_kg_richiesto}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-blue-600 hover:text-white active:scale-95 transition-all">
-                            <PlayCircle size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-4 space-y-4">
+                {attItems.map(l => (
+                  <div key={l.id_lavorazione} className="bg-amber-500 border-l-[12px] border-l-amber-800 p-5 rounded-3xl flex items-center justify-between group hover:bg-amber-400 transition-all shadow-lg">
+                    <div className="flex items-center gap-6">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-slate-950 text-2xl italic leading-none">{l.scheda}</h4>
+                          <div className="flex gap-1">
+                             <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black text-slate-900">{l.mcoil_lega}</span>
+                             {l.spessore && <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black text-slate-900">{l.spessore}</span>}
+                          </div>
+                        </div>
+                        <p className="text-lg font-black text-amber-950 uppercase mt-1 truncate max-w-[280px] leading-tight tracking-tight">{l.l_clienti?.cliente}</p>
+                        <div className="flex gap-4 mt-2 items-center">
+                           <p className="text-[10px] font-black text-amber-950 uppercase tracking-tighter flex items-center gap-1.5"><Tag size={12}/> {l.mcoil}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-10">
+                      <div className="flex flex-col items-center">
+                         <span className="text-[10px] font-black text-amber-900 uppercase block mb-1 leading-none">PESO KG</span>
+                         <span className="bg-white/20 px-2.5 py-1.5 rounded-xl text-[10px] font-black text-amber-950 uppercase flex items-center gap-1 shadow-sm whitespace-nowrap">
+                            {l.ordine_kg_richiesto} KG
+                         </span>
+                      </div>
+                      <div className="text-center">
+                         <span className="text-[10px] font-black text-amber-900 uppercase block mb-1 leading-none">DATA</span>
+                         <span className="text-2xl font-black text-slate-950 tabular-nums leading-none uppercase italic">
+                            {formatDateForDisplay(l.data_consegna)}
+                         </span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[10px] font-black text-amber-900 uppercase block mb-1 leading-none">MISURA</span>
+                        <span className="text-2xl font-black text-slate-950 italic leading-none">{l.misura}</span>
+                      </div>
+                      <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="p-4 bg-white text-amber-900 rounded-2xl shadow-2xl border-2 border-amber-600 active:scale-95 hover:scale-105 transition-all">
+                        <PlayCircle size={26} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {attItems.length === 0 && (
+                   <div className="py-20 text-center text-amber-900/40 italic uppercase font-black text-[10px] tracking-[0.3em]">Coda vuota</div>
+                )}
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* Destra: Chat Sticky */}
-        <div className="w-full lg:w-[350px] shrink-0">
-          <div className="lg:sticky lg:top-24">
-            <Chat />
-          </div>
+        <div className="w-full lg:w-[380px] lg:sticky lg:top-24 flex-shrink-0">
+           <Chat />
         </div>
       </div>
 
-      {/* Camera Button */}
-      <button onClick={() => setShowScanOptions(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-xl z-50 active:scale-90 border-2 border-white">
-        <Camera size={24} />
-        <div className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full text-blue-600 flex items-center justify-center border-2 border-blue-600"><Plus size={12} strokeWidth={4} /></div>
-      </button>
+      {/* MODALE MAGAZZINO */}
+      {showMagazzinoPicker && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-[200]">
+          <div className="bg-white rounded-[3rem] w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+            <div className="bg-slate-950 p-8 border-b border-white/10 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-4 text-white">
+                <div className="p-3 bg-amber-600 rounded-2xl shadow-lg shadow-amber-600/20"><Inbox size={24} /></div>
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tighter italic leading-none">MAGAZZINO SCHEDE</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mt-1 tracking-widest italic">ASSEGNAZIONE A {currentMacchinaName}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowMagazzinoPicker(false)} className="text-slate-500 hover:text-white transition-colors p-2"><X size={32} /></button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto flex-grow custom-scrollbar space-y-3 bg-slate-50">
+              {magazzino.length === 0 ? (
+                <div className="py-24 text-center text-slate-400">
+                   <Inbox size={48} className="mx-auto mb-4 opacity-10" />
+                   <p className="text-[10px] font-black uppercase tracking-[0.3em]">Nessuna scheda in magazzino 'MAG'</p>
+                </div>
+              ) : (
+                magazzino.map(s => (
+                  <button 
+                    key={s.id_lavorazione} 
+                    onClick={() => assegnaSchedaAMacchina(s)}
+                    className="w-full bg-white border border-slate-200 rounded-[2.5rem] p-6 flex items-center justify-between hover:bg-blue-50 hover:border-blue-200 group transition-all shadow-sm"
+                  >
+                    <div className="flex gap-10 items-center">
+                       <div className="text-left">
+                          <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">SCHEDA</span>
+                          <span className="text-3xl font-black text-slate-900 italic leading-none">{s.scheda}</span>
+                       </div>
+                       <div className="text-left">
+                          <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">CLIENTE</span>
+                          <span className="text-lg font-black text-slate-800 uppercase block truncate max-w-[240px] tracking-tight">{s.l_clienti?.cliente}</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">MISURA: {s.misura} mm</span>
+                       </div>
+                    </div>
+                    <div className="flex items-center gap-8">
+                       <div className="text-right">
+                          <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">ORDINE</span>
+                          <span className="text-2xl font-black text-blue-600 tabular-nums">{s.ordine_kg_richiesto} KG</span>
+                       </div>
+                       <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner group-hover:bg-blue-600 group-hover:text-white transition-all">
+                          <Plus size={24} />
+                       </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Modale Scansione */}
-      {showScanOptions && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl relative">
-            <button onClick={() => setShowScanOptions(false)} className="absolute top-4 right-4 text-slate-300 hover:text-slate-900"><X size={20} /></button>
-            <h3 className="text-sm font-bold text-slate-900 mb-6 uppercase text-center tracking-widest">Carica Scheda</h3>
+      {/* SELETTORE MACCHINA OTTIMIZZATO RESPONSIVE */}
+      {showMacchinaPicker && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative flex flex-col max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-slate-200">
+            {/* Header compatto */}
+            <div className="p-6 sm:p-8 pb-4 shrink-0 border-b border-slate-100 text-center">
+               <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-xl shadow-blue-500/20">
+                  <Laptop className="w-6 h-6 sm:w-8 sm:h-8" />
+               </div>
+               <h3 className="text-lg sm:text-xl font-black uppercase text-slate-950 italic leading-none">POSTAZIONE DI LAVORO</h3>
+               <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 sm:mt-2">SELEZIONA UNITÀ OPERATIVA</p>
+            </div>
+            
+            {/* Griglia responsive */}
+            <div className="p-4 sm:p-8 overflow-y-auto flex-grow custom-scrollbar">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 pb-4">
+                  {macchine.map(m => (
+                    <button 
+                      key={m.id_macchina} 
+                      onClick={() => { 
+                        setSelectedMacchina(m.id_macchina); 
+                        localStorage.setItem('kme_selected_macchina', m.id_macchina); 
+                        setShowMacchinaPicker(false); 
+                      }} 
+                      className={`flex flex-col items-center justify-center p-4 sm:p-6 border-2 rounded-3xl transition-all active:scale-95 group shadow-sm min-h-[100px] sm:min-h-[140px] ${
+                        selectedMacchina === m.id_macchina 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-500/20' 
+                        : 'bg-slate-50 border-slate-100 hover:border-blue-200 text-slate-950 hover:bg-white'
+                      }`}
+                    >
+                      <Laptop className={`w-6 h-6 sm:w-8 sm:h-8 mb-2 sm:mb-3 transition-transform group-hover:scale-110 ${selectedMacchina === m.id_macchina ? 'opacity-100' : 'opacity-20'}`} />
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-center italic leading-tight">
+                        {m.macchina}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SELETTORE FASE */}
+      {showFasePicker && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[150]">
+          <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-xs border border-slate-200 shadow-2xl text-center">
+            <h3 className="text-xs font-black uppercase mb-8 text-slate-950 tracking-widest leading-none italic">INIZIO LAVORAZIONE</h3>
             <div className="flex flex-col gap-3">
-              <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-3 bg-slate-900 text-white p-4 rounded-xl text-xs font-bold uppercase active:scale-95"><Camera size={18} /> Scatta Foto</button>
-              <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 bg-slate-100 text-slate-600 p-4 rounded-xl text-xs font-bold uppercase active:scale-95"><Upload size={18} /> Galleria</button>
-              <button onClick={() => { setShowScanOptions(false); setScanResult({ scheda: '', cliente: '', misura: '', ordine_kg_richiesto: '', data_consegna: formatDate(new Date()) }); }} className="flex items-center gap-3 bg-blue-50 text-blue-600 p-4 rounded-xl text-xs font-bold uppercase active:scale-95"><Keyboard size={18} /> Manuale</button>
-            </div>
-            <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
-            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
-          </div>
-        </div>
-      )}
-
-      {/* Modale Conferma IA */}
-      {scanResult && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 z-[200]">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b flex justify-between items-center sticky top-0 bg-white rounded-t-2xl">
-              <h3 className="text-sm font-bold uppercase tracking-tight">Verifica Dati IA</h3>
-              <button onClick={() => setScanResult(null)} className="text-slate-300 hover:text-red-500"><X size={20} /></button>
-            </div>
-            <div className="p-6 overflow-y-auto space-y-4">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cliente</label>
-                <input list="c-list" type="text" value={scanResult.cliente || ''} onChange={(e) => setScanResult({...scanResult, cliente: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl font-bold uppercase text-sm outline-none focus:border-blue-500" />
-                <datalist id="c-list">{clienti.map(c => <option key={c.id_cliente} value={c.cliente} />)}</datalist>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Scheda</label>
-                  <input type="text" value={scanResult.scheda || ''} onChange={(e) => setScanResult({...scanResult, scheda: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Misura (mm)</label>
-                  <input type="text" value={scanResult.misura || ''} onChange={(e) => setScanResult({...scanResult, misura: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-blue-600 text-sm" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-emerald-600 uppercase">Peso Richiesto</label>
-                  <input type="text" value={scanResult.ordine_kg_richiesto || ''} onChange={(e) => setScanResult({...scanResult, ordine_kg_richiesto: e.target.value})} className="w-full p-3 bg-emerald-50 border border-emerald-100 rounded-xl font-bold text-emerald-700" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Consegna</label>
-                  <input type="date" value={scanResult.data_consegna || ''} onChange={(e) => setScanResult({...scanResult, data_consegna: e.target.value})} className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-xs" />
-                </div>
-              </div>
-            </div>
-            <div className="p-5 bg-slate-50 border-t flex gap-3 rounded-b-2xl">
-              <button onClick={() => setScanResult(null)} className="flex-1 py-3 bg-white border text-slate-500 rounded-xl font-bold text-[10px] uppercase">Esci</button>
-              <button onClick={handleInviaScheda} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase shadow-lg shadow-blue-500/20 active:scale-95">Conferma e Inserisci</button>
+              {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
+                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-5 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-2xl font-black text-[11px] uppercase transition-all border border-slate-100 text-slate-700 shadow-sm active:scale-95">
+                  {f.fase_di_lavorazione}
+                </button>
+              ))}
+              <button onClick={() => setShowFasePicker(null)} className="mt-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-slate-950 transition-colors">ANNULLA</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modale Chiusura */}
       {showTerminaPicker && (
         <TerminaModal lavorazione={showTerminaPicker} onClose={() => setShowTerminaPicker(null)} onConfirm={finishLavorazione} />
       )}
 
-      {/* Picker Fase */}
-      {showFasePicker && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150]">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-xs">
-            <h3 className="text-xs font-bold uppercase text-center mb-6">Seleziona Operazione</h3>
-            <div className="flex flex-col gap-2">
-              {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
-                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-4 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-xl font-bold text-[10px] uppercase transition-all">
-                  {f.fase_di_lavorazione}
-                </button>
-              ))}
-              <button onClick={() => setShowFasePicker(null)} className="mt-4 text-[9px] font-bold text-slate-400 uppercase">Chiudi</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modale Postazione */}
-      {showMacchinaPicker && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6 z-[1000]">
-          <div className="bg-white rounded-2xl p-8 w-full max-w-sm">
-            <h3 className="text-sm font-bold uppercase text-center mb-8">Postazione di Lavoro</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {macchine.map(m => (
-                <button key={m.id_macchina} onClick={() => { setSelectedMacchina(m.id_macchina); localStorage.setItem('kme_selected_macchina', m.id_macchina); setShowMacchinaPicker(false); }} className="flex flex-col items-center justify-center p-5 bg-slate-50 hover:bg-blue-600 hover:text-white border rounded-xl transition-all active:scale-95 group">
-                  <Laptop size={20} className="mb-2 opacity-30 group-hover:opacity-100" />
-                  <span className="text-xs font-bold uppercase">{m.id_macchina}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loading Overlay */}
       {loading && (
-        <div className="fixed inset-0 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center z-[9999]">
-          <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin mb-4" />
-          <p className="text-[10px] font-bold text-slate-900 uppercase tracking-[0.2em]">{loadingMsg}</p>
+        <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl flex flex-col items-center justify-center z-[9999]">
+          <div className="w-16 h-16 border-4 border-white/10 border-t-blue-600 rounded-full animate-spin mb-6" />
+          <p className="text-[13px] font-black text-white uppercase tracking-[0.4em] italic animate-pulse">{loadingMsg}</p>
         </div>
       )}
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}</style>
     </div>
   );
 };
 
 const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
-  const [kg, setKg] = useState<number>(lavorazione.ordine_kg_richiesto || 0);
+  const [kg, setKg] = useState<number>(lavorazione.ordine_kg_lavorato || 0);
+  const [nastri, setNastri] = useState<number>(lavorazione.numero_passate || 1);
+  const [pezzi, setPezzi] = useState<number>(lavorazione.numero_pezzi || 1);
+
   const metri = useMemo(() => {
-    if (!kg || !lavorazione.spessore || !lavorazione.misura) return 0;
+    if (!kg || !lavorazione.spessore || !lavorazione.misura || !nastri || !pezzi) return 0;
+    const sp = parseFloat(String(lavorazione.spessore));
+    const mi = parseFloat(String(lavorazione.misura));
     const rho = (lavorazione.mcoil_lega || '').includes('OT') ? 8.41 : 8.96;
-    return Math.round(((kg / 1 / rho) * 1000) / (lavorazione.spessore * lavorazione.misura));
-  }, [kg, lavorazione]);
+    const totalVolume_cm3 = (kg * 1000) / rho;
+    const section_mm2 = sp * mi * nastri * pezzi;
+    return Math.round(totalVolume_cm3 / section_mm2);
+  }, [kg, lavorazione.spessore, lavorazione.misura, lavorazione.mcoil_lega, nastri, pezzi]);
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl border-t-4 border-emerald-500">
-        <div className="flex justify-between items-center mb-6">
-           <h3 className="text-sm font-bold uppercase">Fine Lavorazione</h3>
-           <button onClick={onClose} className="text-slate-300 hover:text-red-500"><X size={20} /></button>
-        </div>
-        <div className="space-y-4">
-          <div className="bg-slate-50 p-6 rounded-xl border text-center">
-            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-2">Peso Reale (KG)</label>
-            <input type="number" value={kg} autoFocus onChange={(e) => setKg(Number(e.target.value))} className="w-full bg-transparent border-none font-bold text-4xl text-center text-emerald-600 outline-none" />
+      <div className="bg-white rounded-[3rem] w-full max-w-sm shadow-2xl relative border-t-[12px] border-emerald-500 overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-200">
+        <button onClick={onClose} className="absolute top-8 right-8 text-slate-400 hover:text-slate-950 transition-colors z-20 p-2"><X size={32} /></button>
+        <div className="p-10 space-y-8 bg-white overflow-y-auto flex-grow custom-scrollbar">
+          <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 flex flex-col items-center text-center shadow-inner">
+            <label className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4">PESO REALE (KG)</label>
+            <input 
+              type="number" 
+              value={kg} 
+              autoFocus 
+              onChange={(e) => setKg(Number(e.target.value))} 
+              className="w-full bg-white border border-slate-300 rounded-3xl py-6 px-4 font-black text-6xl text-center text-emerald-600 outline-none tabular-nums focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-lg" 
+            />
+            <div className="mt-6 px-6 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black text-slate-500 uppercase shadow-sm">TEORICO: {lavorazione.ordine_kg_richiesto} KG</div>
           </div>
-          <div className="p-4 rounded-xl bg-blue-50 flex items-center justify-center gap-2 border border-blue-100">
-            <Ruler size={14} className="text-blue-500" />
-            <span className="text-[10px] font-bold text-blue-600 uppercase">Sviluppo: {metri} Metri</span>
+          
+          <div className="grid grid-cols-2 gap-4">
+             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">NASTRI</label>
+                <input type="number" value={nastri} onChange={e => setNastri(Number(e.target.value))} className="w-full bg-transparent font-black text-xl text-center outline-none" />
+             </div>
+             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">PEZZI</label>
+                <input type="number" value={pezzi} onChange={e => setPezzi(Number(e.target.value))} className="w-full bg-transparent font-black text-xl text-center outline-none" />
+             </div>
           </div>
+
+          <div className="bg-blue-600 p-6 rounded-[2rem] flex items-center justify-center gap-4 shadow-xl shadow-blue-600/20">
+             <Ruler size={24} className="text-white" />
+             <span className="text-lg font-black text-white uppercase tracking-widest leading-none italic">SVILUPPO: {metri} MT</span>
+          </div>
+          
+          <button onClick={() => onConfirm(lavorazione, kg, metri, nastri, pezzi)} className="w-full bg-slate-950 py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 shadow-2xl hover:bg-black transition-all">
+             <CheckCircle2 size={28} className="text-emerald-400" />
+             <span className="text-sm font-black text-white uppercase tracking-[0.2em]">SALVA E CHIUDI</span>
+          </button>
         </div>
-        <button onClick={() => onConfirm(lavorazione, kg, metri)} className="mt-8 w-full py-4 bg-slate-950 text-white rounded-xl font-bold uppercase text-xs active:scale-95 flex items-center justify-center gap-2">
-          <CheckCircle2 size={16} className="text-emerald-400" /> Salva e Chiudi
-        </button>
       </div>
     </div>
   );

@@ -7,92 +7,81 @@ export default async function handler(req: any, res: any) {
   }
 
   const { image } = req.body;
-
-  if (!image) {
-    return res.status(400).json({ error: 'Immagine mancante' });
-  }
+  if (!image) return res.status(400).json({ error: 'Immagine mancante' });
 
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Configurazione server errata: API_KEY mancante' });
-  }
+  if (!apiKey) return res.status(500).json({ error: 'Configurazione server errata: API_KEY mancante' });
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    // Usiamo Gemini 3 Pro per la massima precisione richiesta dall'utente
+    // Schema rigoroso basato sulla foto dell'utente
+    const RESPONSE_SCHEMA = {
+      type: Type.OBJECT,
+      properties: {
+        scheda: { type: Type.STRING, description: "Numero dopo 'Scheda n°' (es: 5431)" },
+        mcoil: { type: Type.STRING, description: "Codice dopo 'Master Coil :' (es: EM018539)" },
+        mcoil_kg: { type: Type.STRING, description: "Valore dopo 'Kg MC :' (es: 4.328)" },
+        spessore: { type: Type.STRING, description: "Valore dopo 'Spessore MC :' (es: 0.5)" },
+        mcoil_larghezza: { type: Type.STRING, description: "Valore dopo 'Larghezza MC :' (es: 1055)" },
+        id_cliente: { type: Type.STRING, description: "Codice numerico che precede il nome cliente (es: 03038553)" },
+        conferma_voce: { type: Type.STRING, description: "Codice dopo 'Conferma-Voce :' (es: 837820-1)" },
+        cliente: { type: Type.STRING, description: "Ragione sociale del cliente (es: METALLI ITALIA SRL)" },
+        mcoil_lega: { type: Type.STRING, description: "Valore dopo 'Lega :' (es: CUETP)" },
+        mcoil_stato_fisico: { type: Type.STRING, description: "Valore dopo 'Stato Fisico :' (es: Ricotto generico)" },
+        data_consegna: { type: Type.STRING, description: "Data sotto 'D.Cli.' (es: 03-12)" },
+        ordine_kg_lavorati: { type: Type.STRING, description: "Valore dopo 'Qtà Taglio :' (es: 1.012)" },
+        ordine_kg_richiesto: { type: Type.STRING, description: "Valore dopo 'Qtà Ordinata Kg :' (es: 1.000)" },
+        misura: { type: Type.STRING, description: "Valore dopo 'Largh. :' incluse tolleranze (es: 10 (+0,200 / -0,200))" },
+      },
+      required: [
+        "scheda", "mcoil", "mcoil_kg", "spessore", "mcoil_larghezza", 
+        "id_cliente", "conferma_voce", "cliente", "mcoil_lega", 
+        "mcoil_stato_fisico", "data_consegna", "ordine_kg_lavorati", 
+        "ordine_kg_richiesto", "misura"
+      ],
+    };
+
+    const prompt = `
+      Analizza questa scheda tecnica KME ITALY SPA. Estrai i dati con estrema precisione.
+      Punti di riferimento visivi:
+      - IN ALTO: 'Scheda n°' (4 cifre).
+      - RIGA 1 NOTA: 'Master Coil' (codice), 'Kg MC', 'Spessore MC', 'Larghezza MC'.
+      - RIGA 2 NOTA: 'Lega', 'Stato Fisico'.
+      - BLOCCO CENTRALE SINISTRA: 'Conferma-Voce', 'Id Cliente' (codice numerico prima del nome), 'Cliente' (testo).
+      - BLOCCO CENTRALE DESTRA: Data sotto 'D.Cli.'.
+      - DETTAGLI PRODUZIONE: 'Qtà Taglio' (lavorato), 'Qtà Ordinata Kg' (richiesto).
+      - DISEGNO/MISURE: Cerca 'Largh. :' per la misura con tolleranze.
+      
+      Ignora scritte a mano. Restituisci esclusivamente il JSON richiesto.
+    `;
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: image
-            }
+          { 
+            inlineData: { 
+              mimeType: 'image/jpeg', 
+              data: image.includes(',') ? image.split(',')[1] : image 
+            } 
           },
-          {
-            text: `Agisci come un esperto di data entry industriale KME. Analizza questa scheda tecnica di produzione.
-            ESTRAI I SEGUENTI DATI:
-
-            1. SCHEDA: Il numero che segue "Scheda n°" nella parte superiore (es: 5926).
-            2. CLIENTE: Il nome della ditta che si trova sotto "Conferma-Voce". Solitamente preceduto da un codice numerico (es: da "03041690 - SIRIO ELETTRONICA SR" estrai "SIRIO ELETTRONICA SR").
-            3. MASTER COIL: Il codice sotto "Master Coil :" (es: EM020458).
-            4. PESO MC (Kg): Il valore sotto "Kg MC :" (es: 3.166).
-            5. SPESSORE MC: Il valore sotto "Spessore MC :" (es: 0.3).
-            6. LARGHEZZA MC: Il valore sotto "Larghezza MC :" (es: 1050).
-            7. LEGA: Il valore sotto "Lega :" (es: CUETP).
-            8. QTA ORDINATA KG (ordine_kg_richiesto): Il valore numerico dopo "Qtà Ordinata Kg :" (es: 400).
-            9. PESO TEORICO (ordine_kg_lavorato): Il valore posizionato sopra il peso finale.
-            10. MISURA (LARGHEZZA TAGLIO): Il valore numerico dopo "Largh. :" nella sezione dei dettagli di taglio (es: 40).
-            11. DATA CONSEGNA (D.Cli.): Estrai il valore sotto "D.Cli." (es: 06-02). 
-                CONVERSIONE DATA: Convertilo in YYYY-MM-DD usando l'anno 2026 se non diversamente specificato. Quindi 06-02 diventa 2026-02-06.
-
-            Restituisci ESCLUSIVAMENTE un JSON puro secondo questo schema:
-            {
-              "scheda": numero,
-              "cliente": "stringa",
-              "mcoil": "stringa",
-              "mcoil_kg": numero,
-              "spessore": numero,
-              "mcoil_larghezza": numero,
-              "mcoil_lega": "stringa",
-              "ordine_kg_richiesto": numero,
-              "ordine_kg_lavorato": numero,
-              "misura": numero,
-              "data_consegna": "YYYY-MM-DD"
-            }`
-          }
+          { text: prompt }
         ]
       },
       config: {
-        temperature: 0,
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            scheda: { type: Type.INTEGER, nullable: true },
-            cliente: { type: Type.STRING, nullable: true },
-            mcoil: { type: Type.STRING, nullable: true },
-            mcoil_kg: { type: Type.NUMBER, nullable: true },
-            spessore: { type: Type.NUMBER, nullable: true },
-            mcoil_larghezza: { type: Type.INTEGER, nullable: true },
-            mcoil_lega: { type: Type.STRING, nullable: true },
-            ordine_kg_richiesto: { type: Type.INTEGER, nullable: true },
-            ordine_kg_lavorato: { type: Type.INTEGER, nullable: true },
-            misura: { type: Type.NUMBER, nullable: true },
-            data_consegna: { type: Type.STRING, nullable: true }
-          }
-        }
-      }
+        responseSchema: RESPONSE_SCHEMA,
+      },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("Risposta vuota dall'IA");
+    const text = response.text || "";
+    // Pulizia di emergenza se l'IA include blocchi di codice markdown
+    const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
     
-    res.status(200).json(JSON.parse(text.trim()));
+    res.status(200).json(JSON.parse(cleanJson));
   } catch (error: any) {
-    console.error("Errore API Analisi KME:", error);
+    console.error("Errore Gemini API:", error);
     res.status(500).json({ error: "Analisi fallita: " + error.message });
   }
 }
