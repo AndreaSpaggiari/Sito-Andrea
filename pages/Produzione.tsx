@@ -12,7 +12,7 @@ import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, CheckCircle2, X, 
   Activity, Plus, Settings2, Calendar, Inbox, 
-  ChevronLeft, ChevronRight, PlayCircle
+  ChevronLeft, ChevronRight, PlayCircle, Layers, Box
 } from 'lucide-react';
 
 const formatDateForDisplay = (dateStr: string | null) => {
@@ -38,7 +38,7 @@ const Produzione: React.FC = () => {
   const [magazzino, setMagazzino] = useState<Lavorazione[]>([]);
   const [filterDate, setFilterDate] = useState(formatDate(new Date()));
   const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('CARICAMENTO...');
+  const [loadingMsg, setLoadingMsg] = useState('SYNC...');
   const [showMacchinaPicker, setShowMacchinaPicker] = useState(false);
   const [showMagazzinoPicker, setShowMagazzinoPicker] = useState(false);
   const [showFasePicker, setShowFasePicker] = useState<{ id: string } | null>(null);
@@ -60,7 +60,7 @@ const Produzione: React.FC = () => {
 
   const fetchLavorazioni = useCallback(async (showLoader = true) => {
     if (!selectedMacchina) return;
-    if (showLoader) { setLoading(true); setLoadingMsg('SINCRONIZZAZIONE...'); }
+    if (showLoader) { setLoading(true); setLoadingMsg('Sincronizzazione Unità...'); }
     const { data } = await supabase.from('l_lavorazioni').select(`*, l_clienti:id_cliente (*), l_macchine:id_macchina (*), l_fasi_di_lavorazione:id_fase (*)`).eq('id_macchina', selectedMacchina);
     if (data) setLavorazioni(data);
     setLoading(false);
@@ -111,17 +111,9 @@ const Produzione: React.FC = () => {
       .filter(l => l.id_stato === Stati.ATT)
       .sort((a, b) => {
         if (sortCriteria === 'scheda') return a.scheda - b.scheda;
-        if (sortCriteria === 'cliente') {
-          const nameA = a.l_clienti?.cliente || '';
-          const nameB = b.l_clienti?.cliente || '';
-          return nameA.localeCompare(nameB);
-        }
+        if (sortCriteria === 'cliente') return (a.l_clienti?.cliente || '').localeCompare(b.l_clienti?.cliente || '');
         if (sortCriteria === 'misura') return a.misura - b.misura;
-        if (sortCriteria === 'data') {
-          const dateA = a.data_consegna || '9999-12-31';
-          const dateB = b.data_consegna || '9999-12-31';
-          return dateA.localeCompare(dateB);
-        }
+        if (sortCriteria === 'data') return (a.data_consegna || '9999').localeCompare(b.data_consegna || '9999');
         return 0;
       });
   }, [lavorazioni, sortCriteria]);
@@ -129,120 +121,102 @@ const Produzione: React.FC = () => {
   const currentMacchinaName = useMemo(() => macchine.find(m => m.id_macchina === selectedMacchina)?.macchina || 'POSTAZIONE', [macchine, selectedMacchina]);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 pb-10">
+    <div className="min-h-screen bg-[#0a0f1a] text-slate-100 flex flex-col pb-10">
       <div className="w-full max-w-[1900px] mx-auto p-4 flex flex-col gap-6">
         
-        {/* Postazione Sub-Header BLOCCATA (Sticky) */}
-        <div className="sticky top-[73px] z-40 py-2 bg-slate-100/80 backdrop-blur-sm">
-          <div className="bg-white p-4 rounded-3xl shadow-lg border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <Link to="/lavoro" className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-400 hover:text-slate-900 transition-all"><ArrowLeft size={20} /></Link>
+        <div className="sticky top-[73px] z-40 py-2">
+          <div className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col lg:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-6">
+              <Link to="/lavoro" className="p-3 bg-white/5 rounded-2xl text-white/40 hover:text-white transition-all border border-white/5 hover:border-white/20 shadow-xl"><ArrowLeft size={22} /></Link>
               <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">KME HUB</span>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-black text-[#1e293b] uppercase italic tracking-tighter leading-none">{currentMacchinaName}</h1>
-                  <button onClick={() => setShowMacchinaPicker(true)} className="p-2 bg-blue-600 text-white rounded-xl shadow-lg active:scale-90 transition-all"><Settings2 size={16} /></button>
+                <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em] block mb-1">UNITÀ OPERATIVA</span>
+                <div className="flex items-center gap-4">
+                  <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter leading-none">{currentMacchinaName}</h1>
+                  <button onClick={() => setShowMacchinaPicker(true)} className="p-2.5 bg-white/5 text-blue-400 rounded-xl hover:bg-white/10 transition-all border border-blue-500/20 shadow-lg"><Settings2 size={18} /></button>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
-               <button onClick={() => { let d = new Date(filterDate); d.setDate(d.getDate()-1); setFilterDate(formatDate(d)); }} className="p-2 text-slate-400"><ChevronLeft size={20} /></button>
-               <div className="px-4 flex items-center gap-3">
-                  <Calendar size={16} className="text-blue-600" />
-                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-[11px] font-black uppercase outline-none" />
+            <div className="flex items-center bg-black/40 p-2 rounded-3xl border border-white/5">
+               <button onClick={() => { let d = new Date(filterDate); d.setDate(d.getDate()-1); setFilterDate(formatDate(d)); }} className="p-2.5 text-white/20 hover:text-white transition-colors"><ChevronLeft size={24} /></button>
+               <div className="px-6 flex items-center gap-3">
+                  <Calendar size={18} className="text-amber-500" />
+                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-transparent text-white font-bold uppercase tracking-widest outline-none text-xs" />
                </div>
-               <button onClick={() => { let d = new Date(filterDate); d.setDate(d.getDate()+1); setFilterDate(formatDate(d)); }} className="p-2 text-slate-400"><ChevronRight size={20} /></button>
+               <button onClick={() => { let d = new Date(filterDate); d.setDate(d.getDate()+1); setFilterDate(formatDate(d)); }} className="p-2.5 text-white/20 hover:text-white transition-colors"><ChevronRight size={24} /></button>
             </div>
 
-            <div className="flex gap-2">
-               <button onClick={() => { fetchMagazzino(); setShowMagazzinoPicker(true); }} className="px-6 py-4 bg-[#0f172a] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-3 active:scale-95 transition-all"><Inbox size={18} /> PRELEVA</button>
-               <button onClick={() => fetchLavorazioni(true)} className="p-4 bg-blue-600 text-white rounded-2xl shadow-lg active:scale-90 transition-all"><RefreshCw size={20} className={loading ? 'animate-spin' : ''} /></button>
+            <div className="flex gap-3">
+               <button onClick={() => { fetchMagazzino(); setShowMagazzinoPicker(true); }} className="px-8 py-5 bg-white text-slate-950 rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl flex items-center gap-3 active:scale-95 transition-all"><Inbox size={20} /> PRELEVA</button>
+               <button onClick={() => fetchLavorazioni(true)} className="p-5 bg-white/5 text-white/60 hover:text-white rounded-[1.5rem] shadow-xl border border-white/10 active:scale-90 transition-all"><RefreshCw size={22} className={loading ? 'animate-spin' : ''} /></button>
             </div>
           </div>
         </div>
 
-        {/* Layout Colonne Bilanciate 50/50 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
-          {/* Parte SINISTRA (Dark Blue) - Attività */}
-          <div className="bg-[#1e293b] rounded-[2.5rem] shadow-2xl border border-slate-800 overflow-hidden min-h-[800px]">
-            <div className="px-8 py-6 flex justify-between items-center border-b border-white/5 bg-[#1e293b]">
-               <div className="flex items-center gap-3">
-                  <Activity size={20} className="text-blue-500" />
-                  <h2 className="text-white font-black uppercase italic tracking-widest text-sm">ATTIVITÀ POSTAZIONE</h2>
+          <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[850px] flex flex-col">
+            <div className="px-10 py-8 flex justify-between items-center border-b border-white/5">
+               <div className="flex items-center gap-4 text-white">
+                  <Activity size={22} className="text-blue-500" />
+                  <h2 className="font-black uppercase italic tracking-widest text-base">ATTIVITÀ POSTAZIONE</h2>
                </div>
-               <span className="bg-blue-600 text-white px-4 py-1 rounded-xl text-xs font-black shadow-lg shadow-blue-500/20">{proItems.length}</span>
+               <span className="bg-blue-600/20 text-blue-400 px-5 py-2 rounded-2xl text-xs font-black border border-blue-500/20 shadow-lg">{proItems.length} SCHEDE</span>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
                {proItems.map(l => {
                  const isPro = l.id_stato === Stati.PRO;
                  const isPre = l.id_stato === Stati.PRE;
                  const isTer = l.id_stato === Stati.TER;
-                 let statusColor = "bg-emerald-400 border-l-emerald-600";
-                 let badgeColor = "bg-emerald-600 text-white";
-                 let badgeText = "TER";
                  
-                 if (isPro) {
-                   statusColor = "bg-sky-400 border-l-sky-600";
-                   badgeColor = "bg-sky-600 text-white";
-                   badgeText = "PRO";
-                 }
-                 if (isPre) {
-                   statusColor = "bg-slate-200 border-l-slate-400";
-                   badgeColor = "bg-slate-400 text-white";
-                   badgeText = "PRE";
-                 }
-
                  return (
-                   <div key={l.id_lavorazione} className={`p-6 rounded-[2rem] border-l-[16px] shadow-xl flex flex-col items-stretch transition-all group ${statusColor}`}>
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-3">
-                             <div className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm ${badgeColor}`}>{badgeText}</div>
-                             <span className="text-3xl font-black text-slate-900 italic leading-none">{l.scheda}</span>
-                             <div className="flex flex-wrap gap-1">
-                                <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[8px] font-black uppercase">{l.mcoil_lega}</span>
-                                <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[8px] font-black uppercase">{l.mcoil_stato_fisico}</span>
-                                <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[8px] font-black uppercase">{l.spessore}</span>
-                                <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[8px] font-black uppercase">{l.mcoil}</span>
+                   <div key={l.id_lavorazione} className={`p-8 rounded-[2.5rem] border border-white/5 transition-all relative overflow-hidden group ${
+                     isPro ? 'bg-blue-600/10 border-blue-500/40' : 
+                     isPre ? 'bg-white/[0.05] border-white/10' : 
+                     'bg-emerald-500/10 border-emerald-500/30'
+                   }`}>
+                      {isPro && <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.6)]"></div>}
+                      
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10">
+                        <div className="flex flex-col gap-3 flex-1">
+                          <div className="flex items-center gap-4">
+                             <span className="text-4xl font-black text-white italic tracking-tighter leading-none">{l.scheda}</span>
+                             <div className="flex gap-2">
+                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-white/60 uppercase border border-white/10">{l.mcoil_lega} {l.mcoil_stato_fisico}</span>
+                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-blue-400 uppercase border border-blue-500/20">{l.spessore} MM</span>
                              </div>
                           </div>
                           <div>
-                            <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-tight">{l.l_clienti?.cliente}</h4>
-                            <p className="text-[10px] font-bold text-slate-600 uppercase italic tracking-widest mt-0.5">{l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'NON DEFINITA'}</p>
+                            <h4 className="text-xl font-bold text-white uppercase tracking-tight leading-none truncate max-w-[280px]">{l.l_clienti?.cliente}</h4>
+                            <div className="flex items-center gap-2 mt-2">
+                               <div className={`w-1.5 h-1.5 rounded-full ${isPro ? 'bg-blue-500 animate-pulse' : isPre ? 'bg-slate-400' : 'bg-emerald-500'}`}></div>
+                               <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">{l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'ATTESA SETUP'}</p>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-6">
-                           <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-10">
+                           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                               <div className="text-center">
-                                 <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">CONSEGNA</span>
-                                 <span className="text-lg font-black text-slate-900 uppercase italic leading-none">{formatDateForDisplay(l.data_consegna)}</span>
+                                 <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">ORDINE KG</span>
+                                 <span className="text-xl font-black text-white italic">{l.ordine_kg_richiesto}</span>
                               </div>
                               <div className="text-center">
-                                 <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">ORDINE KG</span>
-                                 <span className="text-lg font-black text-slate-900 uppercase italic leading-none">{l.ordine_kg_richiesto}</span>
-                                 {isTer && <span className="text-[9px] block font-bold text-emerald-800 italic mt-0.5">{l.ordine_kg_lavorato} PROD.</span>}
-                              </div>
-                              <div className="text-center">
-                                 <span className="text-[8px] font-black text-slate-500 uppercase block mb-1">MISURA</span>
-                                 <span className="text-3xl font-black text-slate-900 italic leading-none">{l.misura}</span>
+                                 <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">MISURA</span>
+                                 <span className="text-xl font-black text-amber-500 italic">{l.misura} <span className="text-[10px] opacity-30 not-italic">MM</span></span>
                               </div>
                            </div>
                            
-                           <div className="flex gap-2 min-w-[120px] justify-end">
+                           <div className="flex min-w-[140px] justify-end">
                              {isPre && (
-                               <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-2xl active:scale-95 transition-all"><PlayCircle size={20} fill="white"/> PREPARA</button>
+                               <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:bg-blue-500 transition-all active:scale-95 border border-blue-400/30"><PlayCircle size={28} fill="white"/></button>
                              )}
                              {isPro && (
-                               <button onClick={() => setShowTerminaPicker(l)} className="px-6 py-4 bg-white text-blue-900 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border-2 border-blue-600 shadow-2xl active:scale-95 transition-all flex items-center gap-2">
-                                 <CheckCircle2 size={20} className="text-blue-600"/> TERMINA
-                               </button>
+                               <button onClick={() => setShowTerminaPicker(l)} className="px-6 py-4 bg-white text-slate-950 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all border border-white/20">CHIUDI</button>
                              )}
                              {isTer && (
-                               <div className="px-6 py-4 bg-white/50 border-2 border-emerald-600 rounded-2xl font-black text-[9px] uppercase tracking-widest text-emerald-950 shadow-inner">COMPLETATA</div>
+                               <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20"><CheckCircle2 size={24} /></div>
                              )}
                            </div>
                         </div>
@@ -253,51 +227,46 @@ const Produzione: React.FC = () => {
             </div>
           </div>
 
-          {/* Parte DESTRA (Orange) - Coda Attesa */}
-          <div className="bg-[#d97706] rounded-[2.5rem] shadow-2xl border border-amber-500 overflow-hidden min-h-[800px]">
-             <div className="px-8 py-6 flex justify-between items-center border-b border-white/10 bg-[#d97706]">
-                <div className="flex items-center gap-3 text-white">
-                   <Inbox size={20} />
-                   <h2 className="font-black uppercase italic tracking-widest text-sm">CODA ATTESA</h2>
+          <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[850px] flex flex-col">
+             <div className="px-10 py-8 flex justify-between items-center border-b border-white/5 bg-amber-600/[0.03]">
+                <div className="flex items-center gap-4 text-white">
+                   <Layers size={22} className="text-amber-500" />
+                   <h2 className="font-black uppercase italic tracking-widest text-base">CODA ATTESA</h2>
                 </div>
-                <div className="flex gap-1">
-                   {['SCHEDA', 'CLIENTE', 'MISURA', 'DATA'].map(c => (
-                     <button key={c} onClick={() => setSortCriteria(c.toLowerCase() as any)} className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${sortCriteria === c.toLowerCase() ? 'bg-white text-amber-600 shadow-lg' : 'text-white/60 hover:text-white'}`}>{c}</button>
+                <div className="flex gap-2">
+                   {['SCHEDA', 'CLIENTE', 'MISURA'].map(c => (
+                     <button key={c} onClick={() => setSortCriteria(c.toLowerCase() as any)} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${sortCriteria === c.toLowerCase() ? 'bg-amber-600 text-slate-950' : 'bg-white/5 text-white/40 hover:text-white'}`}>{c}</button>
                    ))}
                 </div>
              </div>
 
-             <div className="p-6 space-y-4">
+             <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
                 {attItems.map(l => (
-                  <div key={l.id_lavorazione} className="bg-amber-500 border-l-[16px] border-l-amber-700 p-6 rounded-[2rem] shadow-xl flex items-center justify-between group hover:bg-amber-400 transition-all">
-                     <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                           <span className="text-3xl font-black text-slate-950 italic leading-none">{l.scheda}</span>
-                           <div className="flex gap-1">
-                            <span className="bg-amber-700/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-950 uppercase">{l.mcoil_lega}</span>
-                            <span className="bg-amber-700/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-950 uppercase">{l.mcoil_stato_fisico}</span>
+                  <div key={l.id_lavorazione} className="bg-amber-500/[0.04] border border-amber-500/10 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-500/[0.08] hover:border-amber-500/20 transition-all">
+                     <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-4">
+                           <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
+                           <div className="flex gap-2">
+                             <span className="bg-amber-600/10 px-2 py-0.5 rounded text-[8px] font-black text-amber-500 uppercase border border-amber-500/20">{l.mcoil_lega} {l.mcoil_stato_fisico}</span>
+                             <span className="bg-white/5 px-2 py-0.5 rounded text-[8px] font-bold text-white/30 uppercase">{l.spessore} MM</span>
                            </div>
                         </div>
-                        <h4 className="text-lg font-black text-amber-950 uppercase mt-1 truncate max-w-[200px] leading-tight">{l.l_clienti?.cliente}</h4>
+                        <h4 className="text-base font-bold text-white/70 uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
                      </div>
 
-                     <div className="flex items-center gap-8">
-                        <div className="flex gap-6 text-right">
+                     <div className="flex items-center gap-10">
+                        <div className="flex gap-10 text-right">
                            <div>
-                              <span className="text-[8px] font-black text-amber-900/60 uppercase block mb-1">DATA</span>
-                              <span className="text-base font-black text-slate-950 italic whitespace-nowrap">{formatDateForDisplay(l.data_consegna)}</span>
+                              <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">ORDINATO KG</span>
+                              <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto}</span>
                            </div>
                            <div>
-                              <span className="text-[8px] font-black text-amber-900/60 uppercase block mb-1 text-center">ORDINE</span>
-                              <span className="text-base font-black text-slate-950 italic whitespace-nowrap">{l.ordine_kg_richiesto} KG</span>
-                           </div>
-                           <div>
-                              <span className="text-[8px] font-black text-amber-900/60 uppercase block mb-1 text-center">MISURA</span>
-                              <span className="text-3xl font-black text-slate-950 italic leading-none whitespace-nowrap">{l.misura}</span>
+                              <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">MISURA</span>
+                              <span className="text-2xl font-black text-amber-500 italic tabular-nums">{l.misura}</span>
                            </div>
                         </div>
-                        <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="px-6 py-4 bg-white text-amber-900 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center gap-2">
-                           <PlayCircle size={20} fill="currentColor"/> PREPARA
+                        <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-600 text-slate-950 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-500 transition-all group-hover:shadow-amber-600/20">
+                           <Plus size={24} />
                         </button>
                      </div>
                   </div>
@@ -307,23 +276,55 @@ const Produzione: React.FC = () => {
         </div>
       </div>
 
-      {showMagazzinoPicker && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-[200]">
-          <div className="bg-white rounded-[3.5rem] w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
-            <div className="bg-slate-950 p-8 flex justify-between items-center text-white">
-              <h3 className="text-xl font-black uppercase italic tracking-tighter">MAGAZZINO SCHEDE ATTIVE</h3>
-              <button onClick={() => setShowMagazzinoPicker(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors"><X size={32} /></button>
+      {showMacchinaPicker && (
+        <div className="fixed inset-0 bg-[#0a0f1a]/95 backdrop-blur-2xl flex items-center justify-center p-4 z-[1000] animate-in fade-in duration-300">
+          <div className="bg-white/[0.02] rounded-[3rem] w-full max-w-lg shadow-[0_0_100px_rgba(0,0,0,0.5)] p-12 border border-white/10 flex flex-col text-center">
+            <div className="w-20 h-20 bg-blue-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-blue-500/20">
+               <Settings2 size={40} className="text-white" />
             </div>
-            <div className="p-6 overflow-y-auto space-y-3 bg-slate-50">
-              {magazzino.length === 0 ? <p className="text-center py-20 text-slate-400 font-black uppercase tracking-widest text-xs">Nessuna scheda disponibile</p> : magazzino.map(s => (
-                <button key={s.id_lavorazione} onClick={() => assegnaMacchina(s)} className="w-full bg-white border border-slate-200 rounded-[2rem] p-6 flex items-center justify-between hover:bg-blue-50 transition-all shadow-sm">
-                   <div className="flex flex-col text-left">
-                     <span className="text-3xl font-black text-slate-900 italic leading-none">{s.scheda}</span>
-                     <span className="text-[10px] font-black text-slate-400 uppercase mt-2">{s.l_clienti?.cliente}</span>
+            <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-10">Sincronizzazione Unità</h3>
+            <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[50vh] pr-2 custom-scrollbar">
+              {macchine.map(m => (
+                <button 
+                  key={m.id_macchina} 
+                  onClick={() => { setSelectedMacchina(m.id_macchina); localStorage.setItem('kme_selected_macchina', m.id_macchina); setShowMacchinaPicker(false); }} 
+                  className={`p-6 border-2 rounded-3xl font-black uppercase italic transition-all active:scale-95 ${
+                    selectedMacchina === m.id_macchina 
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-2xl' 
+                      : 'bg-white/5 border-white/5 text-white/40 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-500/5'
+                  }`}
+                >
+                  {m.macchina}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMagazzinoPicker && (
+        <div className="fixed inset-0 bg-[#0a0f1a]/95 backdrop-blur-2xl flex items-center justify-center p-6 z-[200] animate-in zoom-in-95 duration-300">
+          <div className="bg-white/[0.02] border border-white/10 rounded-[4rem] w-full max-w-4xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="p-10 flex justify-between items-center border-b border-white/5">
+              <div className="flex items-center gap-4">
+                 <Box size={28} className="text-amber-500" />
+                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white">Master List Magazzino</h3>
+              </div>
+              <button onClick={() => setShowMagazzinoPicker(false)} className="w-12 h-12 bg-white/5 hover:bg-white/10 rounded-2xl flex items-center justify-center text-white/40 hover:text-white transition-all"><X size={28} /></button>
+            </div>
+            <div className="p-8 overflow-y-auto space-y-4 bg-black/20">
+              {magazzino.length === 0 ? <p className="text-center py-32 text-white/10 font-black uppercase tracking-[0.5em]">Zero Unità Disponibili</p> : magazzino.map(s => (
+                <button key={s.id_lavorazione} onClick={() => assegnaMacchina(s)} className="w-full bg-white/[0.03] border border-white/5 rounded-[2.5rem] p-8 flex items-center justify-between hover:bg-white/[0.06] hover:border-white/10 transition-all group">
+                   <div className="flex flex-col text-left gap-1">
+                     <span className="text-4xl font-black text-white italic leading-none">{s.scheda}</span>
+                     <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{s.l_clienti?.cliente}</span>
                    </div>
-                   <div className="flex items-center gap-10">
-                     <div className="text-right"><span className="text-[8px] font-black text-slate-400 block mb-1 uppercase">KG ORDINE</span><span className="text-2xl font-black text-blue-600 italic tabular-nums">{s.ordine_kg_richiesto}</span></div>
-                     <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100"><Plus size={28} className="text-blue-600"/></div>
+                   <div className="flex items-center gap-12">
+                     <div className="text-right">
+                        <span className="text-[9px] font-bold text-white/20 block mb-1 uppercase tracking-widest">ORDER KG</span>
+                        <span className="text-2xl font-black text-amber-500 italic tabular-nums">{s.ordine_kg_richiesto}</span>
+                     </div>
+                     <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-slate-950 transition-all border border-white/5 shadow-xl"><Plus size={32} /></div>
                    </div>
                 </button>
               ))}
@@ -332,29 +333,19 @@ const Produzione: React.FC = () => {
         </div>
       )}
 
-      {showMacchinaPicker && (
-        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 z-[1000]">
-          <div className="bg-white rounded-[3rem] w-full max-w-md shadow-2xl p-10 border border-slate-200 flex flex-col">
-            <h3 className="text-2xl font-black uppercase text-center mb-8 italic text-slate-900 tracking-tighter underline decoration-blue-600 decoration-4 underline-offset-8">Scegli Postazione</h3>
-            <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[60vh] pr-2 custom-scrollbar text-center">
-              {macchine.map(m => (
-                <button key={m.id_macchina} onClick={() => { setSelectedMacchina(m.id_macchina); localStorage.setItem('kme_selected_macchina', m.id_macchina); setShowMacchinaPicker(false); }} className={`p-8 border-2 rounded-[2rem] font-black uppercase italic transition-all active:scale-95 ${selectedMacchina === m.id_macchina ? 'bg-blue-600 border-blue-600 text-white shadow-2xl' : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-blue-600 hover:text-blue-600'}`}>{m.macchina}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {showFasePicker && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[1500] p-4">
-          <div className="bg-white rounded-[3rem] p-10 w-full max-w-xs border border-slate-200 shadow-2xl text-center flex flex-col gap-6">
-            <h3 className="text-xs font-black uppercase tracking-[0.3em] italic text-slate-400 text-center">SELEZIONA LAVORAZIONE</h3>
-            <div className="flex flex-col gap-3">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-[1500] p-4">
+          <div className="bg-white/[0.02] border border-white/10 rounded-[3rem] p-10 w-full max-w-sm shadow-2xl text-center flex flex-col gap-10">
+            <div>
+               <h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/30 italic mb-2">SETUP PROCESSO</h3>
+               <p className="text-xl font-bold text-white">Scegli Tipo Lavorazione</p>
+            </div>
+            <div className="flex flex-col gap-4">
               {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
-                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-6 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-2xl font-black text-xs uppercase transition-all border border-slate-100 text-slate-700 shadow-sm active:scale-95">{f.fase_di_lavorazione}</button>
+                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-8 bg-white/5 hover:bg-blue-600 hover:text-white rounded-3xl font-black text-xs uppercase tracking-widest transition-all border border-white/5 shadow-xl active:scale-95">{f.fase_di_lavorazione}</button>
               ))}
             </div>
-            <button onClick={() => setShowFasePicker(null)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-4">Annulla</button>
+            <button onClick={() => setShowFasePicker(null)} className="text-[10px] font-black text-white/20 hover:text-white uppercase tracking-widest transition-colors">Torna Indietro</button>
           </div>
         </div>
       )}
@@ -364,13 +355,19 @@ const Produzione: React.FC = () => {
       )}
 
       {loading && (
-        <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl flex flex-col items-center justify-center z-[9999]">
-          <div className="w-16 h-16 border-4 border-white/10 border-t-blue-600 rounded-full animate-spin mb-6" />
-          <p className="text-[13px] font-black text-white uppercase tracking-[0.4em] italic animate-pulse">{loadingMsg}</p>
+        <div className="fixed inset-0 bg-[#0a0f1a]/95 backdrop-blur-3xl flex flex-col items-center justify-center z-[9999]">
+          <div className="w-20 h-20 border-4 border-white/5 border-t-blue-600 rounded-full animate-spin mb-8 shadow-[0_0_30px_rgba(59,130,246,0.2)]" />
+          <p className="text-sm font-black text-white/60 uppercase tracking-[0.6em] italic animate-pulse">{loadingMsg}</p>
         </div>
       )}
       
       <Chat />
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
+      `}</style>
     </div>
   );
 };
@@ -384,7 +381,6 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
 
   const parseNum = (val: any) => {
     if (!val) return 0;
-    if (typeof val === 'number') return val;
     let s = String(val).trim().replace(',', '.');
     const n = parseFloat(s);
     return isNaN(n) ? 0 : n;
@@ -396,44 +392,42 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
     const mi = parseNum(misuraInput);
     const n = parseNum(nastri);
     const pz = parseNum(pezzi);
-    
-    if (p <= 0 || sp <= 0 || mi <= 0 || n <= 0 || pz <= 0) return 0;
+    if (p <= 0 || sp <= 0 || mi <= 0) return 0;
     const rho = (lavorazione.mcoil_lega || '').toUpperCase().includes('OT') ? 8.50 : 8.96;
-    const totalWidth_mm = mi * n * pz;
-    const result = (p * 1000) / (rho * sp * totalWidth_mm);
+    const result = (p * 1000) / (rho * sp * (mi * n * pz));
     return isFinite(result) ? Math.round(result) : 0;
   }, [kgInput, spessoreInput, misuraInput, lavorazione.mcoil_lega, nastri, pezzi]);
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-white rounded-[3.5rem] w-full max-w-md shadow-2xl relative border-t-[20px] border-blue-600 overflow-hidden flex flex-col animate-in zoom-in duration-300">
-        <button onClick={onClose} className="absolute top-10 right-10 text-slate-400 hover:text-slate-950 transition-colors z-20 p-2"><X size={36} /></button>
-        <div className="p-12 space-y-10">
+    <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 z-[9999] animate-in zoom-in duration-300">
+      <div className="bg-white/[0.02] border border-white/10 rounded-[4rem] w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col p-12">
+        <button onClick={onClose} className="absolute top-10 right-10 text-white/20 hover:text-white transition-colors z-20"><X size={32} /></button>
+        <div className="space-y-12">
           <div className="text-center">
-            <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none mb-2">CHIUSURA SCHEDA</h3>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Inserimento Dati Finali</p>
+             <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-1">Dati Produzione</h3>
+             <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.4em] italic leading-none">TERMINA SCHEDA {lavorazione.scheda}</p>
           </div>
-          <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 flex flex-col items-center shadow-inner">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">PESO REALE (KG)</label>
-            <input type="text" inputMode="decimal" value={kgInput} autoFocus onChange={(e) => setKgInput(e.target.value)} className="w-full bg-transparent font-black text-7xl text-center text-blue-600 outline-none tabular-nums placeholder-slate-200" placeholder="0,00" />
+          <div className="bg-white/5 p-10 rounded-[3rem] border border-white/5 flex flex-col items-center shadow-inner relative group">
+            <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] mb-4">PESO EFFETTIVO KG</label>
+            <input type="text" inputMode="decimal" value={kgInput} autoFocus onChange={(e) => setKgInput(e.target.value)} className="w-full bg-transparent font-black text-8xl text-center text-blue-500 outline-none tabular-nums placeholder-white/5" placeholder="00.0" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-             <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 flex flex-col items-center">
-                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">NASTRI</label>
-                <input type="number" value={nastri} onChange={e => setNastri(Number(e.target.value))} className="w-full bg-transparent font-black text-2xl text-center outline-none text-slate-900" />
+          <div className="grid grid-cols-2 gap-6">
+             <div className="bg-white/5 p-6 rounded-[2rem] border border-white/5 text-center">
+                <span className="text-[9px] font-bold text-white/20 uppercase block mb-2">NASTRI</span>
+                <input type="number" value={nastri} onChange={e => setNastri(Number(e.target.value))} className="w-full bg-transparent font-black text-3xl text-center outline-none text-white tabular-nums" />
              </div>
-             <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 flex flex-col items-center">
-                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">PEZZI</label>
-                <input type="number" value={pezzi} onChange={e => setPezzi(Number(e.target.value))} className="w-full bg-transparent font-black text-2xl text-center outline-none text-slate-900" />
+             <div className="bg-white/5 p-6 rounded-[2rem] border border-white/5 text-center">
+                <span className="text-[9px] font-bold text-white/20 uppercase block mb-2">PEZZI</span>
+                <input type="number" value={pezzi} onChange={e => setPezzi(Number(e.target.value))} className="w-full bg-transparent font-black text-3xl text-center outline-none text-white tabular-nums" />
              </div>
           </div>
-          <div className="bg-blue-600 p-8 rounded-[2.5rem] flex flex-col items-center justify-center gap-1 shadow-2xl shadow-blue-500/30">
-            <span className="text-xl font-black text-white/60 uppercase tracking-widest italic leading-none mb-1">SVILUPPO</span>
-            <span className="text-5xl font-black text-white italic tracking-tighter leading-none">{metri} <span className="text-xl opacity-50 not-italic">MT</span></span>
+          <div className="bg-blue-600 p-10 rounded-[3rem] flex flex-col items-center justify-center gap-1 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
+            <span className="text-sm font-black text-white/50 uppercase tracking-[0.4em] italic mb-1">SVILUPPO CALCOLATO</span>
+            <span className="text-6xl font-black text-white italic tracking-tighter tabular-nums">{metri} <span className="text-2xl not-italic opacity-40">MT</span></span>
           </div>
-          <button onClick={() => onConfirm(lavorazione, parseNum(kgInput), metri, nastri, pezzi)} className="w-full bg-slate-950 py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 shadow-2xl transition-all group">
-            <CheckCircle2 size={32} className="text-emerald-400 group-hover:scale-110" />
-            <span className="text-sm font-black text-white uppercase tracking-[0.3em]">SALVA E CHIUDI</span>
+          <button onClick={() => onConfirm(lavorazione, parseNum(kgInput), metri, nastri, pezzi)} className="w-full bg-white py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 shadow-2xl transition-all group border border-white">
+            <CheckCircle2 size={32} className="text-blue-600 group-hover:scale-110" />
+            <span className="text-sm font-black text-slate-950 uppercase tracking-[0.4em]">REGISTRA DATI</span>
           </button>
         </div>
       </div>
