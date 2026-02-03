@@ -54,14 +54,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const refreshProfile = useCallback(async () => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    if (currentSession?.user) {
-      setLoading(true);
-      await fetchOrCreateProfile(currentSession.user);
-    }
-  }, [fetchOrCreateProfile]);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -98,41 +90,41 @@ const App: React.FC = () => {
       <main className="flex-grow">
         <Routes>
           <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-          <Route path="/" element={<Home profile={profile} session={session} onRefresh={refreshProfile} />} />
+          <Route path="/" element={<Home profile={profile} session={session} onRefresh={async () => {}} />} />
           <Route path="/pallamano" element={<Pallamano profile={profile} />} />
           
           <Route path="/lavoro" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+            <ProtectedRoute session={session} profile={profile}>
               <Lavoro />
             </ProtectedRoute>
           } />
           
           <Route path="/lavoro/produzione" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Produzione />
+            <ProtectedRoute session={session} section="LAVORO_PRODUZIONE" profile={profile}>
+              <Produzione profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/macchine" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+            <ProtectedRoute session={session} section="LAVORO_MACCHINE" profile={profile}>
               <Macchine />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/magazzino" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+            <ProtectedRoute session={session} section="LAVORO_MAGAZZINO" profile={profile}>
               <Magazzino />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/ufficio" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+            <ProtectedRoute session={session} section="LAVORO_UFFICIO" profile={profile}>
               <Ufficio />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/utilita" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+            <ProtectedRoute session={session} section="LAVORO_UTILITA" profile={profile}>
               <Utilita />
             </ProtectedRoute>
           } />
