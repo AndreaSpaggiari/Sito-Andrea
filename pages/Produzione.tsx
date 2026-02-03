@@ -13,7 +13,7 @@ import {
   ArrowLeft, RefreshCw, CheckCircle2, PlayCircle, X, 
   Laptop, ClipboardList, Ruler, Activity, Plus, Layers, Hash, Settings2,
   CheckCircle, Scale, Weight, Inbox, Calendar, Tag, Info, ChevronLeft, ChevronRight,
-  RotateCcw, Play, ArrowRight
+  RotateCcw, Play, ArrowRight, Boxes
 } from 'lucide-react';
 
 const formatDateForDisplay = (dateStr: string | null) => {
@@ -305,16 +305,20 @@ const Produzione: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <h4 className="font-black text-slate-950 text-2xl italic leading-none">{l.scheda}</h4>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                              <span className="bg-white/60 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.mcoil_lega || 'RAME'}</span>
+                             <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.mcoil_stato_fisico || 'N/D'}</span>
                              {l.spessore && <span className="bg-white/60 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.spessore}</span>}
                              <span className="bg-white/60 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 uppercase tracking-tighter">{l.mcoil}</span>
                           </div>
                         </div>
                         <p className="text-lg font-black text-slate-950 uppercase mt-1 truncate max-w-[280px] leading-tight tracking-tight">{l.l_clienti?.cliente}</p>
-                        <div className="flex gap-3 mt-2.5 items-center">
+                        <div className="flex gap-2 mt-2.5 items-center flex-wrap">
                           <span className="bg-white/40 px-2 py-1 rounded text-[10px] font-black text-slate-950 uppercase flex items-center gap-1.5 shadow-sm whitespace-nowrap">
                              <Calendar size={12} className="text-slate-900" /> {formatDateForDisplay(l.data_consegna)}
+                          </span>
+                          <span className="bg-emerald-500/20 px-2 py-1 rounded text-[10px] font-black text-emerald-950 uppercase flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+                             <Weight size={12} className="text-emerald-800" /> {l.ordine_kg_richiesto || '0'} KG ORD.
                           </span>
                           <span className={`${isPre ? 'bg-slate-300/40' : 'bg-slate-900/10'} px-2.5 py-1.5 rounded-lg text-[9px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap`}>
                              <Info size={11} /> {statusLabel}
@@ -382,8 +386,15 @@ const Produzione: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-black text-slate-950 text-2xl italic leading-none">{l.scheda}</h4>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                            <span className="bg-white/20 px-2 py-0.5 rounded text-[10px] font-black text-slate-900">{l.mcoil_lega}</span>
+                           <span className="bg-slate-900/10 px-2 py-0.5 rounded text-[10px] font-black text-slate-900">{l.mcoil_stato_fisico}</span>
+                           <span className="bg-white/30 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 flex items-center gap-1">
+                              <Weight size={10}/> {l.ordine_kg_richiesto} KG
+                           </span>
+                           <span className="bg-white/30 px-2 py-0.5 rounded text-[10px] font-black text-slate-900 flex items-center gap-1">
+                              <Calendar size={10}/> {formatDateForDisplay(l.data_consegna)}
+                           </span>
                         </div>
                       </div>
                       <p className="text-lg font-black text-amber-950 uppercase mt-1 truncate max-w-[280px] leading-tight tracking-tight">{l.l_clienti?.cliente}</p>
