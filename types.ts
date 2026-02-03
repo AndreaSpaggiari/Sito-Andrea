@@ -1,5 +1,15 @@
 
-export type SectionType = 'PALLAMANO' | 'LAVORO' | 'PERSONALE';
+export type SectionType = 
+  | 'PALLAMANO' 
+  | 'PERSONALE' 
+  | 'LAVORO'
+  | 'LAVORO_PRODUZIONE' 
+  | 'LAVORO_MACCHINE' 
+  | 'LAVORO_MAGAZZINO' 
+  | 'LAVORO_UFFICIO' 
+  | 'LAVORO_UTILITA';
+
+export type AccessLevel = 'VISUALIZZATORE' | 'OPERATORE';
 
 export interface ChatMessage {
   id?: string;
@@ -15,7 +25,6 @@ export interface OnlineUser {
   online_at: string;
 }
 
-// Tipi Auth e Permessi
 export type UserRole = 'ADMIN' | 'USER';
 export type PermissionStatus = 'RICHIESTO' | 'AUTORIZZATO' | 'NEGATO';
 
@@ -31,6 +40,7 @@ export interface UserPermission {
   user_id: string;
   sezione: SectionType;
   stato: PermissionStatus;
+  livello_accesso: AccessLevel;
   nome: string;
   cognome: string;
   chat_username: string;
@@ -38,69 +48,10 @@ export interface UserPermission {
   created_at?: string;
 }
 
-// Tipi Pallamano
-export interface HandballMatch {
-  id: string;
-  created_at: string;
-  campionato: string;
-  squadra_casa: string;
-  squadra_ospite: string;
-  punti_casa: number | null;
-  punti_ospite: number | null;
-  data_partita: string;
-  giornata?: number;
-  note?: string;
-}
-
-export interface HandballStanding {
-  pos: number;
-  squadra: string;
-  punti: number;
-  giocate: number;
-  vinte: number;
-  nulle: number;
-  perse: number;
-  gf: number;
-  gs: number;
-  dr: number;
-  andamento: ('V' | 'N' | 'P')[];
-}
-
-export interface HandballPlayer {
-  id: string;
-  nome: string;
-  cognome: string;
-  data_di_nascita?: string;
-  categoria: string;
-  numero_di_maglia: number;
-  ruoli: string;
-  foto_url?: string;
-}
-
-export interface PlayerStats {
-  id?: string;
-  player_id: string;
-  presenze: number;
-  ammonizioni: number;
-  esclusioni_2m: number;
-  rosse: number;
-  blu: number;
-  goal: number;
-  tiri_totali: number;
-  rigori_segnati: number;
-  rigori_totali: number;
-  parate: number;
-  tiri_subiti: number;
-  assist: number;
-  // Relazioni
-  p_giocatori?: HandballPlayer;
-}
-
-// Tipi Produzione (Invariati)
 export interface Macchina { id_macchina: string; macchina: string; }
 export interface FaseLavorazione { id_fase: string; fase_di_lavorazione: string; }
 export interface Cliente { id_cliente: string; cliente: string; }
-export interface StatoLavorazione { id_stato: string; stato_lavorazione: string; }
+
 export interface Lavorazione {
   id_lavorazione: string; 
   id_macchina: string;
@@ -125,9 +76,65 @@ export interface Lavorazione {
   numero_pezzi: number | null;
   metri_avvolti: number | null;
   data_consegna: string | null;
+  ultimo_utente_id: string | null; // AUDIT TRAIL
   l_clienti?: Cliente;
   l_macchine?: Macchina;
   l_fasi_di_lavorazione?: FaseLavorazione;
 }
 
 export enum Stati { PRE = 'PRE', ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }
+
+// Added missing Handball types for Pallamano.tsx
+export interface HandballMatch {
+  id: string;
+  squadra_casa: string;
+  squadra_ospite: string;
+  data_partita: string;
+  giornata: number;
+  punti_casa: number | null;
+  punti_ospite: number | null;
+  campionato?: string;
+}
+
+export interface HandballPlayer {
+  id: string;
+  nome: string;
+  cognome: string;
+  numero_di_maglia: number;
+  ruoli: string;
+  data_di_nascita: string | null;
+  categoria: string;
+  foto_url?: string | null;
+}
+
+export interface PlayerStats {
+  id: string;
+  player_id: string;
+  presenze: number;
+  ammonizioni: number;
+  esclusioni_2m: number;
+  rosse: number;
+  blu: number;
+  goal: number;
+  tiri_totali: number;
+  rigori_segnati: number;
+  rigori_totali: number;
+  parate: number;
+  tiri_subiti: number;
+  assist: number;
+  p_giocatori?: HandballPlayer;
+}
+
+export interface HandballStanding {
+  pos: number;
+  squadra: string;
+  punti: number;
+  giocate: number;
+  vinte: number;
+  nulle: number;
+  perse: number;
+  gf: number;
+  gs: number;
+  dr: number;
+  andamento: string[];
+}
