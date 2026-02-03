@@ -125,4 +125,4 @@ export interface Lavorazione {
   l_fasi_di_lavorazione?: FaseLavorazione;
 }
 
-export enum Stati { ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }
+export enum Stati { PRE = 'PRE', ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }
