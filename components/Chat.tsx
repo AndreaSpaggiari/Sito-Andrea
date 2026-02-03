@@ -2,9 +2,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { ChatMessage, OnlineUser } from '../types';
-import { Send, Users, LogOut, UserCircle, MessageSquare, ChevronRight } from 'lucide-react';
+import { Send, Users, LogOut, UserCircle, MessageSquare, ChevronRight, X, MessageCircle, Bell } from 'lucide-react';
 
 const Chat: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [lastMessagePreview, setLastMessagePreview] = useState<ChatMessage | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
   const [username, setUsername] = useState<string>(localStorage.getItem('chat_username') || '');
   const [inputName, setInputName] = useState('');
   const [message, setMessage] = useState('');
@@ -24,21 +29,24 @@ const Chat: React.FC = () => {
   };
 
   useEffect(() => {
-    setTimeout(() => scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth'), 100);
-  }, [messages]);
+    if (isOpen) {
+      setTimeout(() => scrollToBottom('smooth'), 100);
+      setUnreadCount(0);
+      setShowPreview(false);
+    }
+  }, [isOpen, messages]);
 
   useEffect(() => {
     if (!username) return;
 
     const fetchMessages = async () => {
-      // Calcoliamo l'inizio della giornata odierna (00:00:00)
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
       const { data } = await supabase
         .from('messages')
         .select('*')
-        .gte('created_at', startOfToday) // Filtro: Solo messaggi di oggi
+        .gte('created_at', startOfToday)
         .order('created_at', { ascending: true })
         .limit(100);
       
@@ -53,9 +61,19 @@ const Chat: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMessage = payload.new as ChatMessage;
-          // Verifica se il messaggio appartiene alla conversazione (pubblico o privato per me)
           if (newMessage.recipient_name === 'ALL' || newMessage.recipient_name === username || newMessage.sender_name === username) {
             setMessages((prev) => [...prev, newMessage]);
+            
+            // Gestione Notifiche se chat chiusa
+            if (!isOpen && newMessage.sender_name !== username) {
+              setUnreadCount(prev => prev + 1);
+              setLastMessagePreview(newMessage);
+              setShowPreview(true);
+              setTimeout(() => setShowPreview(false), 4000);
+              
+              // Feedback aptico/sonoro opzionale qui
+              try { if ('vibrate' in navigator) navigator.vibrate(50); } catch(e){}
+            }
           }
         }
       )
@@ -92,7 +110,7 @@ const Chat: React.FC = () => {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(presenceChannel);
     };
-  }, [username]);
+  }, [username, isOpen]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +123,7 @@ const Chat: React.FC = () => {
   const handleLogout = () => {
     setUsername('');
     localStorage.removeItem('chat_username');
+    setIsOpen(false);
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -123,170 +142,167 @@ const Chat: React.FC = () => {
     }
   };
 
-  if (!username) {
-    return (
-      <div className="bg-white rounded-[2rem] shadow-2xl p-8 border border-slate-100 animate-in fade-in duration-500">
-        <div className="flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-400 mb-6 shadow-inner">
-            <UserCircle size={48} />
-          </div>
-          <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight">Accedi alla Chat</h2>
-          <p className="text-slate-400 text-sm mb-8 leading-relaxed font-medium">Inserisci il tuo nome per comunicare in tempo reale.</p>
-          <form onSubmit={handleLogin} className="w-full space-y-4">
-            <input
-              type="text"
-              value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
-              placeholder="Il tuo nome..."
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-center text-slate-900"
-              required
-            />
-            <button className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 uppercase tracking-widest text-xs">
-              ENTRA NELLA STANZA
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
+  // Render dell'icona flottante o della chat espansa
   return (
-    <div className="bg-white rounded-[2rem] shadow-2xl flex flex-col h-[600px] lg:h-[calc(100vh-180px)] border border-slate-100 overflow-hidden relative">
-      {/* Header */}
-      <div className="bg-[#1e293b] px-6 py-4 text-white flex justify-between items-center shrink-0 z-20 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
-              <MessageSquare size={20} />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#1e293b] rounded-full"></div>
+    <div className="fixed bottom-6 right-6 z-[1000] flex flex-col items-end pointer-events-none">
+      
+      {/* Anteprima Messaggio (Toast) */}
+      {showPreview && !isOpen && lastMessagePreview && (
+        <div 
+          onClick={() => setIsOpen(true)}
+          className="mb-4 bg-white shadow-2xl rounded-2xl p-4 border border-blue-100 flex items-center gap-3 animate-in slide-in-from-right-10 duration-300 pointer-events-auto cursor-pointer hover:bg-slate-50 max-w-[280px]"
+        >
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+             <MessageSquare size={14} />
           </div>
-          <div>
-            <p className="font-black text-[11px] uppercase tracking-widest leading-none">{username}</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-              <p className="text-[9px] font-bold text-slate-400 uppercase">{onlineUsers.length} Online</p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{lastMessagePreview.sender_name}</p>
+            <p className="text-xs font-bold text-slate-800 truncate">{lastMessagePreview.content}</p>
           </div>
         </div>
-        <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-slate-400 hover:text-white">
-          <LogOut size={18} />
-        </button>
-      </div>
+      )}
 
-      <div className="flex flex-grow overflow-hidden bg-white min-h-0">
-        {/* Sidebar Destinatari */}
-        <div className="w-24 sm:w-32 bg-slate-50/50 border-r border-slate-100 p-3 overflow-y-auto hidden md:block shrink-0">
-          <p className="text-[8px] font-black text-slate-400 mb-4 uppercase tracking-widest px-1">Canale</p>
-          <div className="space-y-1">
-            <button
-              onClick={() => setRecipient('ALL')}
-              className={`w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-between group ${recipient === 'ALL' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}
-            >
-              <span>Pubblico</span>
-              {recipient === 'ALL' && <ChevronRight size={10} />}
-            </button>
-            <div className="pt-4 mb-2 border-t border-slate-200">
-              <p className="text-[8px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1">Privato</p>
-              {onlineUsers.filter(u => u.username !== username).map((u, i) => (
-                <button
-                  key={i}
-                  onClick={() => setRecipient(u.username)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-[9px] font-bold transition-all truncate flex items-center justify-between mb-1 ${recipient === u.username ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}
-                >
-                  <span className="truncate">{u.username}</span>
-                  <div className={`w-1 h-1 rounded-full ${recipient === u.username ? 'bg-white' : 'bg-green-500'}`}></div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Area Messaggi */}
-        <div className="flex-grow flex flex-col min-w-0 h-full">
-          <div className="bg-white px-4 py-2 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-              A: <span className={`ml-1 ${recipient === 'ALL' ? 'text-blue-600' : 'text-slate-900'}`}>{recipient === 'ALL' ? 'TUTTI' : recipient.toUpperCase()}</span>
-            </span>
-            <Users size={12} className="text-slate-300 md:hidden" />
-          </div>
-
-          <div 
-            ref={scrollContainerRef}
-            className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#f8fafc] min-h-0"
-          >
-            {messages.map((msg, idx) => {
-              const isMe = msg.sender_name === username;
-              const isPrivate = msg.recipient_name !== 'ALL';
-              
-              return (
-                <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 duration-300`}>
-                  <div className={`flex items-center gap-2 mb-1 px-1`}>
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">
-                      {isMe ? 'Tu' : msg.sender_name} {isPrivate && !isMe && ` (Privato)`}
-                    </span>
-                  </div>
-                  <div className={`group relative max-w-[92%] px-4 py-3 rounded-2xl text-[13px] shadow-sm transition-all hover:shadow-md ${
-                    isMe 
-                      ? 'bg-[#1e293b] text-white rounded-tr-none' 
-                      : isPrivate 
-                        ? 'bg-blue-600 text-white rounded-tl-none'
-                        : 'bg-white text-slate-800 rounded-tl-none border border-slate-200'
-                  }`}>
-                    <p className="leading-relaxed break-words font-medium">{msg.content}</p>
-                    <span className={`text-[8px] mt-1 block opacity-50 text-right ${isMe || isPrivate ? 'text-white' : 'text-slate-500'}`}>
-                      {msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                    </span>
-                  </div>
+      {/* Finestra Chat Espansa */}
+      {isOpen && (
+        <div className="mb-4 w-[350px] sm:w-[400px] h-[550px] bg-white rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-300 pointer-events-auto">
+          
+          {/* Header */}
+          <div className="bg-[#1e293b] px-6 py-4 text-white flex justify-between items-center shrink-0 shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                  <MessageCircle size={20} />
                 </div>
-              );
-            })}
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-slate-300 space-y-2 opacity-50">
-                 <MessageSquare size={32} />
-                 <p className="text-[10px] font-black uppercase tracking-widest">Inizia la chat di oggi</p>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#1e293b] rounded-full"></div>
+              </div>
+              <div>
+                <p className="font-black text-[11px] uppercase tracking-widest leading-none">Reparto {username}</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase">{onlineUsers.length} Colleghi Online</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors" title="Logout">
+                <LogOut size={16} />
+              </button>
+              <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+
+          {!username ? (
+            <div className="flex-grow p-8 flex flex-col items-center justify-center text-center bg-slate-50">
+               <UserCircle size={60} className="text-slate-300 mb-6" />
+               <h3 className="text-lg font-black uppercase italic tracking-tighter text-slate-900 mb-2">Identificati</h3>
+               <form onSubmit={handleLogin} className="w-full space-y-4">
+                  <input
+                    type="text"
+                    value={inputName}
+                    onChange={(e) => setInputName(e.target.value)}
+                    placeholder="Nome o Sigla..."
+                    className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-center outline-none focus:border-blue-500 shadow-sm"
+                    required
+                  />
+                  <button className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl uppercase text-[10px] tracking-widest">Entra</button>
+               </form>
+            </div>
+          ) : (
+            <div className="flex flex-grow overflow-hidden bg-white">
+               {/* Sidebar Canali (Solo Desktop) */}
+               <div className="hidden sm:block w-20 bg-slate-50/50 border-r border-slate-100 p-2 overflow-y-auto shrink-0 text-center">
+                  <button onClick={() => setRecipient('ALL')} className={`w-12 h-12 rounded-2xl mx-auto mb-4 flex items-center justify-center transition-all ${recipient === 'ALL' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-100'}`}>
+                    <Users size={20} />
+                  </button>
+                  <div className="h-[1px] bg-slate-200 mb-4 mx-2"></div>
+                  {onlineUsers.filter(u => u.username !== username).map((u, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => setRecipient(u.username)}
+                      className={`w-10 h-10 rounded-xl mx-auto mb-2 flex items-center justify-center font-black text-[10px] uppercase transition-all relative ${recipient === u.username ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-200/50 text-slate-500 hover:bg-slate-200'}`}
+                      title={u.username}
+                    >
+                      {u.username.substring(0, 2)}
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
+                    </button>
+                  ))}
+               </div>
+
+               {/* Messaggi */}
+               <div className="flex-grow flex flex-col min-w-0">
+                  <div className="px-4 py-2 bg-slate-50/50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Canale: <span className="text-blue-600">{recipient === 'ALL' ? 'Pubblico' : `Privato con ${recipient}`}</span>
+                  </div>
+
+                  <div ref={scrollContainerRef} className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#fcfdfe]">
+                    {messages.filter(m => {
+                      if (recipient === 'ALL') return m.recipient_name === 'ALL';
+                      return (m.sender_name === username && m.recipient_name === recipient) || 
+                             (m.sender_name === recipient && m.recipient_name === username);
+                    }).map((msg, idx) => {
+                      const isMe = msg.sender_name === username;
+                      return (
+                        <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+                          {!isMe && <span className="text-[8px] font-black text-slate-400 uppercase mb-1 ml-1">{msg.sender_name}</span>}
+                          <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-[12px] font-medium shadow-sm ${
+                            isMe ? 'bg-[#1e293b] text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                          }`}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+                    <form onSubmit={sendMessage} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Scrivi..."
+                        className="flex-grow px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:border-blue-500 outline-none font-bold"
+                      />
+                      <button type="submit" className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
+                        <Send size={18} />
+                      </button>
+                    </form>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pulsante Flottante */}
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`pointer-events-auto relative w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500 hover:scale-110 active:scale-90 group ${
+          isOpen ? 'bg-slate-900 rotate-90' : 'bg-blue-600 hover:bg-blue-500'
+        }`}
+      >
+        {isOpen ? <X size={28} className="text-white" /> : (
+          <>
+            <MessageSquare size={28} className="text-white" />
+            {unreadCount > 0 && (
+              <div className="absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-4 border-white animate-bounce shadow-lg">
+                {unreadCount}
               </div>
             )}
-            <div className="h-2"></div>
-          </div>
-
-          {/* Form Invio */}
-          <div className="p-4 bg-white border-t border-slate-100 shrink-0">
-            <form onSubmit={sendMessage} className="flex gap-2">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder={recipient === 'ALL' ? 'Messaggio pubblico...' : `Scrivi a ${recipient}...`}
-                className="flex-grow px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 placeholder:text-xs font-bold text-slate-900"
-              />
-              <button 
-                type="submit"
-                className={`p-3.5 rounded-2xl transition-all shadow-lg active:scale-90 flex items-center justify-center ${
-                  recipient === 'ALL' ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20' : 'bg-[#1e293b] hover:bg-black text-white'
-                }`}
-              >
-                <Send size={20} />
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+            {/* Indicatore visivo di attività */}
+            {!isOpen && onlineUsers.length > 1 && (
+               <div className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+            )}
+          </>
+        )}
+      </button>
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f5f9;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}</style>
     </div>
   );

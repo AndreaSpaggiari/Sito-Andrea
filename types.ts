@@ -31,6 +31,11 @@ export interface UserPermission {
   user_id: string;
   sezione: SectionType;
   stato: PermissionStatus;
+  nome: string;
+  cognome: string;
+  chat_username: string;
+  motivo: string;
+  created_at?: string;
 }
 
 // Tipi Pallamano

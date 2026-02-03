@@ -55,7 +55,7 @@ const Lavoro: React.FC = () => {
         <div className="absolute inset-0 bg-slate-950/40"></div>
         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '25px 25px' }}></div>
         <div className="relative z-10 max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-white/10 text-white px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black uppercase tracking-[0.2em] mb-6 animate-pulse">
+          <div className="inline-flex items-center gap-2 bg-white/10 text-white px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black uppercase tracking-[0.2em] mb-6">
              KME ITALY INDUSTRIAL HUB
           </div>
           <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter italic mb-4 leading-none text-white drop-shadow-2xl">
@@ -66,10 +66,7 @@ const Lavoro: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 -mt-16 relative z-20">
-        <div className="flex flex-col lg:flex-row gap-8 items-start">
-          
-          {/* Main Modules */}
-          <div className="flex-1 w-full">
+        <div className="w-full">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
               {subsections.map((sub, idx) => (
                 <Link 
@@ -122,15 +119,11 @@ const Lavoro: React.FC = () => {
                  </div>
                </div>
             </div>
-          </div>
-
-          {/* Chat Sidebar */}
-          <div className="w-full lg:w-[400px] lg:sticky lg:top-24 flex-shrink-0">
-             <Chat />
-          </div>
-
         </div>
       </div>
+
+      {/* La Chat ora è flottante */}
+      <Chat />
     </div>
   );
 };

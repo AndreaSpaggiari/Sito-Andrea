@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion, Zap, ChevronRight, Activity, Home as HomeIcon, Lock, Globe } from 'lucide-react';
+import { Trophy, Briefcase, User, RefreshCw, Users, Check, X, ShieldCheck, AlertTriangle, Search, MailQuestion, Zap, ChevronRight, Activity, Home as HomeIcon, Lock, Globe, MessageSquare, Info } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -11,6 +11,10 @@ interface PendingRequest {
   stato: string;
   user_id: string;
   created_at: string;
+  nome?: string;
+  cognome?: string;
+  chat_username?: string;
+  motivo?: string;
   profiles?: {
     username: string;
     email: string;
@@ -69,7 +73,9 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   const filteredRequests = requests.filter(r => 
     r.profiles?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.profiles?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.sezione.toLowerCase().includes(searchTerm.toLowerCase())
+    r.sezione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.cognome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const isGuest = !session;
@@ -82,7 +88,7 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
         <div className="relative z-10 max-w-6xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full border border-blue-500/20 text-[10px] font-black uppercase tracking-[0.2em] mb-8 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
-            <HomeIcon size={12} /> Andrea v3.0
+            <HomeIcon size={12} /> Andrea v3.1
           </div>
           <h1 className="text-3xl sm:text-5xl md:text-7xl lg:text-9xl font-black uppercase tracking-tighter italic mb-4 leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 whitespace-nowrap">
             ANDREA <span className="text-blue-500">SPAGGIARI</span>
@@ -110,7 +116,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
             { to: "/personale", color: "emerald", icon: User, label: "PERSONALE", desc: "Archivio Appunti Privati", num: "03", public: false }
           ].map((item, i) => (
             <Link key={i} to={item.to} className="group relative bg-slate-900/80 backdrop-blur-xl rounded-[3rem] p-10 border border-white/5 shadow-2xl transition-all duration-500 hover:scale-[1.02] hover:bg-slate-800 overflow-hidden">
-              {/* Badge Pubblico/Privato */}
               <div className="absolute top-8 left-10 z-30">
                 {item.public ? (
                   <div className="flex items-center gap-1.5 bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg border border-blue-500/30 text-[8px] font-black uppercase tracking-widest shadow-lg">
@@ -122,20 +127,16 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                   </div>
                 )}
               </div>
-
               <div className="absolute top-6 right-10 text-7xl font-black text-white/[0.03] group-hover:text-white/[0.07] transition-colors">{item.num}</div>
-              <div className={`w-16 h-16 bg-slate-800 rounded-[1.5rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-${item.color}-600 transition-all mt-6`}>
+              <div className={`w-16 h-16 bg-slate-800 rounded-[1.5rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-${item.color === 'blue' ? 'blue' : item.color === 'amber' ? 'amber' : 'emerald'}-600 transition-all mt-6`}>
                 <item.icon size={28} className={`text-slate-400 group-hover:text-white transition-colors`} />
               </div>
               <h2 className="text-3xl font-black text-white mb-2 uppercase italic tracking-tighter leading-none">{item.label}</h2>
               <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">{item.desc}</p>
-              
               <div className="mt-8 flex items-center gap-2 text-slate-500 group-hover:text-white transition-colors">
                 <span className="text-[10px] font-black uppercase tracking-widest">Esplora</span>
                 <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </div>
-
-              <div className={`absolute bottom-0 left-0 h-1 bg-${item.color}-500 w-full opacity-0 group-hover:opacity-100 transition-opacity duration-700`}></div>
             </Link>
           ))}
         </div>
@@ -166,7 +167,7 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
               {filteredRequests.map((req) => (
                 <div key={req.id} className="bg-slate-950/50 border border-white/5 rounded-[2.5rem] p-8 transition-all hover:bg-slate-900 group">
                   <div className="flex justify-between items-start mb-6">
@@ -181,22 +182,39 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                     </span>
                   </div>
                   
-                  <div className="mb-8">
-                    <p className="text-sm font-black text-white uppercase truncate tracking-tight">{req.profiles?.username || 'Utente Ignoto'}</p>
-                    <p className="text-[10px] text-slate-500 font-bold mt-1 truncate lowercase">{req.profiles?.email}</p>
-                    <div className="mt-4 flex items-center gap-2">
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Sezione:</span>
-                      <span className={`px-2 py-0.5 text-white text-[8px] font-black rounded uppercase ${
-                        req.sezione === 'LAVORO' ? 'bg-amber-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-emerald-600'
-                      }`}>
-                        {req.sezione}
-                      </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Dati Utente</p>
+                      <p className="text-lg font-black text-white uppercase italic tracking-tight leading-none">
+                        {req.nome || '-'} {req.cognome || '-'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-bold mt-1 lowercase truncate">{req.profiles?.email}</p>
+                      <div className="mt-4 flex items-center gap-2">
+                        <MessageSquare size={12} className="text-blue-500" />
+                        <span className="text-[10px] font-black text-slate-300 uppercase italic">Chat: {req.chat_username || 'n/d'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info size={12} className="text-blue-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dettagli</span>
+                      </div>
+                      <div className="bg-slate-900 p-3 rounded-xl border border-white/5">
+                        <p className="text-[10px] text-slate-400 font-medium leading-relaxed italic line-clamp-3">"{req.motivo || 'Nessun motivo specificato'}"</p>
+                      </div>
+                      <div className="mt-3">
+                         <span className={`px-2 py-0.5 text-white text-[8px] font-black rounded uppercase ${
+                           req.sezione === 'LAVORO' ? 'bg-amber-600' : req.sezione === 'PALLAMANO' ? 'bg-blue-600' : 'bg-emerald-600'
+                         }`}>
+                           Richiesta per: {req.sezione}
+                         </span>
+                      </div>
                     </div>
                   </div>
 
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdatePermission(req.id, 'AUTORIZZATO')} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-all active:scale-95">
-                      <Check size={14} /> Abilita
+                      <Check size={14} /> Autorizza Accesso
                     </button>
                     <button onClick={() => handleUpdatePermission(req.id, 'NEGATO')} className="flex-1 py-4 bg-slate-800 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-600 hover:text-white transition-all active:scale-95">
                       <X size={14} /> Nega
