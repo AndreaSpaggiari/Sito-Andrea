@@ -115,7 +115,7 @@ const Lavoro: React.FC = () => {
 };
 
 const MultiRequestScreen = ({ onComplete, subsections }: { onComplete: () => void, subsections: any[] }) => {
-  // Fixed type inference by explicitly typing the state
+  // Explicitly type the selections state to ensure properties are recognized
   const [selections, setSelections] = useState<Record<string, { selected: boolean, level: AccessLevel }>>(() => 
     subsections.reduce((acc, sub) => ({ 
       ...acc, 
@@ -125,10 +125,11 @@ const MultiRequestScreen = ({ onComplete, subsections }: { onComplete: () => voi
   const [formData, setFormData] = useState({ nome: '', cognome: '', motivo: '' });
   const [loading, setLoading] = useState(false);
 
-  // Added explicit type to prev to avoid 'unknown' error
+  // Use explicit casting in the functional update to fix 'unknown' type error
   const toggleSelection = (id: string) => {
-    setSelections((prev: Record<string, { selected: boolean, level: AccessLevel }>) => {
-      const current = prev[id];
+    setSelections((prev) => {
+      const current = prev[id] as { selected: boolean, level: AccessLevel };
+      if (!current) return prev;
       return {
         ...prev,
         [id]: { ...current, selected: !current.selected }
@@ -136,10 +137,11 @@ const MultiRequestScreen = ({ onComplete, subsections }: { onComplete: () => voi
     });
   };
 
-  // Added explicit type to prev to avoid 'unknown' error
+  // Use explicit casting in the functional update to fix 'unknown' type error
   const setLevel = (id: string, level: AccessLevel) => {
-    setSelections((prev: Record<string, { selected: boolean, level: AccessLevel }>) => {
-      const current = prev[id];
+    setSelections((prev) => {
+      const current = prev[id] as { selected: boolean, level: AccessLevel };
+      if (!current) return prev;
       return {
         ...prev,
         [id]: { ...current, level }

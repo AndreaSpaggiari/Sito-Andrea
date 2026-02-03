@@ -91,12 +91,12 @@ const Home: React.FC<Props> = ({ profile }) => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950"></div>
         <div className="relative z-10 max-w-6xl mx-auto">
           <div className="inline-flex items-center gap-2 bg-blue-500/10 text-blue-400 px-4 py-1.5 rounded-full border border-blue-500/20 text-[10px] font-black uppercase tracking-[0.2em] mb-8 italic">
-            <HomeIcon size={12} /> Andrea Portal v3.9
+            <HomeIcon size={12} /> Sito Personale v1.0
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-9xl font-black uppercase tracking-tighter italic mb-4 leading-none text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500">
-            CONTROLLO <span className="text-blue-500">ACCESSI</span>
+            ANDREA <span className="text-blue-500">SPAGGIARI</span>
           </h1>
-          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">Gestione Granulare Permessi & Audit Trail</p>
+          <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">SITO PERSONALE - In continuo aggiornamento</p>
         </div>
       </div>
 
@@ -110,7 +110,7 @@ const Home: React.FC<Props> = ({ profile }) => {
           <Link to="/lavoro" className="group bg-slate-900/80 backdrop-blur-xl rounded-[3rem] p-10 border border-white/5 shadow-2xl transition-all hover:scale-[1.02]">
              <Briefcase size={40} className="text-slate-500 mb-6 group-hover:text-amber-500 transition-colors" />
              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">LAVORO</h2>
-             <p className="text-slate-500 text-xs font-bold uppercase mt-2 italic">Permessi Granulari</p>
+             <p className="text-slate-500 text-xs font-bold uppercase mt-2 italic">RICHIEDERE AUTORIZZAZIONE</p>
           </Link>
           <Link to="/personale" className="group bg-slate-900/80 backdrop-blur-xl rounded-[3rem] p-10 border border-white/5 shadow-2xl transition-all hover:scale-[1.02]">
              <User size={40} className="text-slate-500 mb-6 group-hover:text-emerald-500 transition-colors" />
