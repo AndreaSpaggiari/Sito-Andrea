@@ -9,6 +9,7 @@ import Produzione from './pages/Produzione';
 import Macchine from './pages/Macchine';
 import Magazzino from './pages/Magazzino';
 import Ufficio from './pages/Ufficio';
+import UfficioStats from './pages/UfficioStats';
 import Utilita from './pages/Utilita';
 import SlitterPiccolo from './pages/SlitterPiccolo';
 import Personale from './pages/Personale';
@@ -135,6 +136,12 @@ const App: React.FC = () => {
           <Route path="/lavoro/ufficio" element={
             <ProtectedRoute session={session} section="LAVORO" profile={profile}>
               <Ufficio />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/ufficio/stats" element={
+            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
+              <UfficioStats />
             </ProtectedRoute>
           } />
 
