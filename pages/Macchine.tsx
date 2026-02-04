@@ -7,7 +7,7 @@ import {
   ArrowLeft, Wrench, Settings, Activity, Cpu, 
   ChevronRight, Scissors, Layers, 
   BarChart3, Box, Settings2, Laptop, Hammer,
-  Clock, CheckCircle2
+  Clock
 } from 'lucide-react';
 
 const ORDERED_NAMES = [
@@ -45,20 +45,17 @@ const Macchine: React.FC = () => {
   const fetchMacchine = useCallback(async () => {
     setLoading(true);
     
-    // 1. Recupero macchine
     const { data: machinesData } = await supabase.from('l_macchine').select('*');
     const filtrate = (machinesData || [])
       .filter(m => !['CASSONE', 'UFFICIO', 'MAGAZZINO', 'IMBALLAGGIO'].includes(m.macchina.toUpperCase()))
       .sort((a, b) => ORDERED_NAMES.indexOf(a.macchina.toUpperCase()) - ORDERED_NAMES.indexOf(b.macchina.toUpperCase()));
     setMacchine(filtrate);
 
-    // 2. Recupero TUTTE le lavorazioni attive o concluse negli ultimi 30gg
     const todayStr = new Date().toISOString().split('T')[0];
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-    // NOTA: Non mettiamo gte sul fine_lavorazione nella query per non escludere la coda (che ha fine_lavorazione null)
     const { data: allWork } = await supabase
       .from('l_lavorazioni')
       .select('id_macchina, id_stato, ordine_kg_lavorato, ordine_kg_richiesto, fine_lavorazione')
@@ -78,7 +75,6 @@ const Macchine: React.FC = () => {
 
       if (l.id_stato === 'TER' && l.fine_lavorazione) {
         const finishDateStr = l.fine_lavorazione.split('T')[0];
-        // Solo se è negli ultimi 30gg lo contiamo per la media
         if (finishDateStr >= thirtyDaysAgoStr) {
           const kg = l.ordine_kg_lavorato || 0;
           if (finishDateStr === todayStr) {
@@ -88,13 +84,11 @@ const Macchine: React.FC = () => {
           machinesHistory[mId][finishDateStr] = (machinesHistory[mId][finishDateStr] || 0) + kg;
         }
       } else if (l.id_stato === 'ATT' || l.id_stato === 'PRE') {
-        // La coda è per definizione quello che non è finito
         statsMap[mId].countPending += 1;
         statsMap[mId].kgPending += (l.ordine_kg_richiesto || 0);
       }
     });
 
-    // 4. Calcolo media
     const calendarDates: Date[] = [];
     for (let i = 0; i < 30; i++) {
       const d = new Date();

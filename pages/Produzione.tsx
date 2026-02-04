@@ -170,27 +170,32 @@ const Produzione: React.FC = () => {
                  const isPre = l.id_stato === Stati.PRE;
                  const isTer = l.id_stato === Stati.TER;
                  
+                 // Definiamo i colori di sfondo basati sullo stato richiesto
+                 const cardBg = isPro ? 'bg-sky-500/10 border-sky-500/30' : 
+                               isPre ? 'bg-slate-500/10 border-slate-500/20' : 
+                               'bg-emerald-500/10 border-emerald-500/20';
+
                  return (
-                   <div key={l.id_lavorazione} className={`p-8 rounded-[2.5rem] border border-white/5 transition-all relative overflow-hidden group ${
-                     isPro ? 'bg-blue-600/10 border-blue-500/40' : 
-                     isPre ? 'bg-white/[0.05] border-white/10' : 
-                     'bg-emerald-500/10 border-emerald-500/30'
-                   }`}>
-                      {isPro && <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.6)]"></div>}
+                   <div key={l.id_lavorazione} className={`p-8 rounded-[2.5rem] border transition-all relative overflow-hidden group ${cardBg}`}>
+                      {isPro && <div className="absolute top-0 left-0 w-1.5 h-full bg-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.4)]"></div>}
                       
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10">
                         <div className="flex flex-col gap-3 flex-1">
                           <div className="flex items-center gap-4">
                              <span className="text-4xl font-black text-white italic tracking-tighter leading-none">{l.scheda}</span>
                              <div className="flex gap-2">
-                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-white/60 uppercase border border-white/10">{l.mcoil_lega} {l.mcoil_stato_fisico}</span>
-                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-blue-400 uppercase border border-blue-500/20">{l.spessore} MM</span>
+                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-white/60 uppercase border border-white/10">
+                                  {l.mcoil_lega} <span className="opacity-40 ml-1">{l.mcoil_stato_fisico}</span>
+                                </span>
+                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-sky-400 uppercase border border-sky-500/20">
+                                  {l.spessore} MM
+                                </span>
                              </div>
                           </div>
                           <div>
                             <h4 className="text-xl font-bold text-white uppercase tracking-tight leading-none truncate max-w-[280px]">{l.l_clienti?.cliente}</h4>
                             <div className="flex items-center gap-2 mt-2">
-                               <div className={`w-1.5 h-1.5 rounded-full ${isPro ? 'bg-blue-500 animate-pulse' : isPre ? 'bg-slate-400' : 'bg-emerald-500'}`}></div>
+                               <div className={`w-1.5 h-1.5 rounded-full ${isPro ? 'bg-sky-500 animate-pulse' : isPre ? 'bg-slate-400' : 'bg-emerald-500'}`}></div>
                                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">{l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'ATTESA SETUP'}</p>
                             </div>
                           </div>
@@ -199,8 +204,8 @@ const Produzione: React.FC = () => {
                         <div className="flex items-center gap-10">
                            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                               <div className="text-center">
-                                 <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">ORDINE KG</span>
-                                 <span className="text-xl font-black text-white italic">{l.ordine_kg_richiesto}</span>
+                                 <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">ORDINATO KG</span>
+                                 <span className="text-xl font-black text-white italic">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
                               </div>
                               <div className="text-center">
                                  <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">MISURA</span>
@@ -210,10 +215,10 @@ const Produzione: React.FC = () => {
                            
                            <div className="flex min-w-[140px] justify-end">
                              {isPre && (
-                               <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:bg-blue-500 transition-all active:scale-95 border border-blue-400/30"><PlayCircle size={28} fill="white"/></button>
+                               <button onClick={() => setShowFasePicker({ id: l.id_lavorazione })} className="w-14 h-14 bg-slate-700 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:bg-slate-600 transition-all active:scale-95 border border-white/10"><PlayCircle size={28} fill="white"/></button>
                              )}
                              {isPro && (
-                               <button onClick={() => setShowTerminaPicker(l)} className="px-6 py-4 bg-white text-slate-950 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all border border-white/20">CHIUDI</button>
+                               <button onClick={() => setShowTerminaPicker(l)} className="px-6 py-4 bg-sky-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all border border-sky-400/30">CHIUDI</button>
                              )}
                              {isTer && (
                                <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20"><CheckCircle2 size={24} /></div>
@@ -242,13 +247,13 @@ const Produzione: React.FC = () => {
 
              <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
                 {attItems.map(l => (
-                  <div key={l.id_lavorazione} className="bg-amber-500/[0.04] border border-amber-500/10 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-500/[0.08] hover:border-amber-500/20 transition-all">
+                  <div key={l.id_lavorazione} className="bg-amber-500/10 border border-amber-500/20 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-500/20 transition-all">
                      <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-4">
                            <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
                            <div className="flex gap-2">
-                             <span className="bg-amber-600/10 px-2 py-0.5 rounded text-[8px] font-black text-amber-500 uppercase border border-amber-500/20">{l.mcoil_lega} {l.mcoil_stato_fisico}</span>
-                             <span className="bg-white/5 px-2 py-0.5 rounded text-[8px] font-bold text-white/30 uppercase">{l.spessore} MM</span>
+                             <span className="bg-amber-600/10 px-2 py-0.5 rounded text-[8px] font-black text-amber-500 uppercase border border-amber-500/20">{l.mcoil_lega} <span className="opacity-40">{l.mcoil_stato_fisico}</span></span>
+                             <span className="bg-white/5 px-2 py-0.5 rounded text-[8px] font-bold text-white/40 uppercase">{l.spessore} MM</span>
                            </div>
                         </div>
                         <h4 className="text-base font-bold text-white/70 uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
@@ -258,19 +263,24 @@ const Produzione: React.FC = () => {
                         <div className="flex gap-10 text-right">
                            <div>
                               <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">ORDINATO KG</span>
-                              <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto}</span>
+                              <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
                            </div>
                            <div>
                               <span className="text-[9px] font-bold text-white/20 uppercase block mb-1">MISURA</span>
                               <span className="text-2xl font-black text-amber-500 italic tabular-nums">{l.misura}</span>
                            </div>
                         </div>
-                        <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-600 text-slate-950 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-500 transition-all group-hover:shadow-amber-600/20">
+                        <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-500 text-slate-950 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-400 transition-all group-hover:shadow-amber-500/20">
                            <Plus size={24} />
                         </button>
                      </div>
                   </div>
                 ))}
+                {attItems.length === 0 && (
+                  <div className="py-20 text-center text-white/10 uppercase font-black italic tracking-widest">
+                    Coda Vuota
+                  </div>
+                )}
              </div>
           </div>
         </div>
@@ -342,7 +352,7 @@ const Produzione: React.FC = () => {
             </div>
             <div className="flex flex-col gap-4">
               {fasi.filter(f => f.id_fase !== 'ATT').map(f => (
-                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-8 bg-white/5 hover:bg-blue-600 hover:text-white rounded-3xl font-black text-xs uppercase tracking-widest transition-all border border-white/5 shadow-xl active:scale-95">{f.fase_di_lavorazione}</button>
+                <button key={f.id_fase} onClick={() => startLavorazione(showFasePicker.id, f.id_fase)} className="p-8 bg-white/5 hover:bg-sky-600 hover:text-white rounded-3xl font-black text-xs uppercase tracking-widest transition-all border border-white/5 shadow-xl active:scale-95">{f.fase_di_lavorazione}</button>
               ))}
             </div>
             <button onClick={() => setShowFasePicker(null)} className="text-[10px] font-black text-white/20 hover:text-white uppercase tracking-widest transition-colors">Torna Indietro</button>
@@ -409,7 +419,7 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
           </div>
           <div className="bg-white/5 p-10 rounded-[3rem] border border-white/5 flex flex-col items-center shadow-inner relative group">
             <label className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] mb-4">PESO EFFETTIVO KG</label>
-            <input type="text" inputMode="decimal" value={kgInput} autoFocus onChange={(e) => setKgInput(e.target.value)} className="w-full bg-transparent font-black text-8xl text-center text-blue-500 outline-none tabular-nums placeholder-white/5" placeholder="00.0" />
+            <input type="text" inputMode="decimal" value={kgInput} autoFocus onChange={(e) => setKgInput(e.target.value)} className="w-full bg-transparent font-black text-8xl text-center text-sky-500 outline-none tabular-nums placeholder-white/5" placeholder="00.0" />
           </div>
           <div className="grid grid-cols-2 gap-6">
              <div className="bg-white/5 p-6 rounded-[2rem] border border-white/5 text-center">
@@ -421,12 +431,12 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
                 <input type="number" value={pezzi} onChange={e => setPezzi(Number(e.target.value))} className="w-full bg-transparent font-black text-3xl text-center outline-none text-white tabular-nums" />
              </div>
           </div>
-          <div className="bg-blue-600 p-10 rounded-[3rem] flex flex-col items-center justify-center gap-1 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
+          <div className="bg-sky-600 p-10 rounded-[3rem] flex flex-col items-center justify-center gap-1 shadow-[0_0_50px_rgba(14,165,233,0.3)]">
             <span className="text-sm font-black text-white/50 uppercase tracking-[0.4em] italic mb-1">SVILUPPO CALCOLATO</span>
             <span className="text-6xl font-black text-white italic tracking-tighter tabular-nums">{metri} <span className="text-2xl not-italic opacity-40">MT</span></span>
           </div>
           <button onClick={() => onConfirm(lavorazione, parseNum(kgInput), metri, nastri, pezzi)} className="w-full bg-white py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 shadow-2xl transition-all group border border-white">
-            <CheckCircle2 size={32} className="text-blue-600 group-hover:scale-110" />
+            <CheckCircle2 size={32} className="text-sky-600 group-hover:scale-110" />
             <span className="text-sm font-black text-slate-950 uppercase tracking-[0.4em]">REGISTRA DATI</span>
           </button>
         </div>
