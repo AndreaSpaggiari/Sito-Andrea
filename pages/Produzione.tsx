@@ -170,7 +170,6 @@ const Produzione: React.FC = () => {
                  const isPre = l.id_stato === Stati.PRE;
                  const isTer = l.id_stato === Stati.TER;
                  
-                 // Definiamo i colori di sfondo basati sullo stato richiesto
                  const cardBg = isPro ? 'bg-sky-500/10 border-sky-500/30' : 
                                isPre ? 'bg-slate-500/10 border-slate-500/20' : 
                                'bg-emerald-500/10 border-emerald-500/20';
@@ -404,7 +403,8 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
     const pz = parseNum(pezzi);
     if (p <= 0 || sp <= 0 || mi <= 0) return 0;
     const rho = (lavorazione.mcoil_lega || '').toUpperCase().includes('OT') ? 8.50 : 8.96;
-    const result = (p * 1000) / (rho * sp * (mi * n * pz));
+    // FORMULA CORRETTA: Nastri e Pezzi sono moltiplicatori dello sviluppo lineare
+    const result = ((p * 1000) / (rho * sp * mi)) * n * pz;
     return isFinite(result) ? Math.round(result) : 0;
   }, [kgInput, spessoreInput, misuraInput, lavorazione.mcoil_lega, nastri, pezzi]);
 
