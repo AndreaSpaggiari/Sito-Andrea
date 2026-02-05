@@ -130,13 +130,14 @@ export interface Lavorazione {
   l_fasi_di_lavorazione?: FaseLavorazione;
 }
 
-// Nuovi Tipi Lame e Stampi (Basati sui tuoi schemi ufficiali)
+// Nuovi Tipi Lame e Stampi
 export interface LameStampo {
   id_lama_stampo: number;
   lama_stampo_tipo: number;
   lama_stampo_serie: number | null;
   id_macchina: string | null;
   lama_stampo_misura: number | null;
+  lama_stampo_misura_attuale: number | null;
   lama_stampo_quantita: number | null;
   // Relazioni per join Supabase
   l_lame_stampi_tipi?: LameStampoTipo;
@@ -152,6 +153,14 @@ export interface LameStampoTipo {
 export interface LameStampoSerie {
   id_lama_stampo_serie: number;
   lama_stampo_serie: string;
+}
+
+export interface LameStampoRegistroUtilizzo {
+  id_utlizzo_lama_stampo: number;
+  id_lama_stampo: number;
+  data_inizio_utilizzo: string | null;
+  data_fine_utilizzo: string | null;
+  note_utilizzo: string | null;
 }
 
 export enum Stati { PRE = 'PRE', ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }
