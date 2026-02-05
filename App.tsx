@@ -111,50 +111,50 @@ const App: React.FC = () => {
           } />
           
           <Route path="/lavoro/produzione" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Produzione />
+            <ProtectedRoute session={session} section="LAVORO" subsection="PRODUZIONE" profile={profile}>
+              <Produzione profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/slitter-piccolo" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <SlitterPiccolo />
+            <ProtectedRoute session={session} section="LAVORO" subsection="SLITTER_PICCOLO" profile={profile}>
+              <SlitterPiccolo profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/slitter-piccolo/lame" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <SlitterLame />
+            <ProtectedRoute session={session} section="LAVORO" subsection="SLITTER_LAME" profile={profile}>
+              <SlitterLame profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/macchine" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Macchine />
+            <ProtectedRoute session={session} section="LAVORO" subsection="MACCHINE" profile={profile}>
+              <Macchine profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/magazzino" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Magazzino />
+            <ProtectedRoute session={session} section="LAVORO" subsection="MAGAZZINO" profile={profile}>
+              <Magazzino profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/ufficio" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Ufficio />
+            <ProtectedRoute session={session} section="LAVORO" subsection="UFFICIO" profile={profile}>
+              <Ufficio profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/ufficio/stats" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <UfficioStats />
+            <ProtectedRoute session={session} section="LAVORO" subsection="UFFICIO" profile={profile}>
+              <UfficioStats profile={profile} />
             </ProtectedRoute>
           } />
 
           <Route path="/lavoro/utilita" element={
-            <ProtectedRoute session={session} section="LAVORO" profile={profile}>
-              <Utilita />
+            <ProtectedRoute session={session} section="LAVORO" subsection="UTILITA" profile={profile}>
+              <Utilita profile={profile} />
             </ProtectedRoute>
           } />
           

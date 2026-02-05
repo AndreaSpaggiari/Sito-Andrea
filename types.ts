@@ -1,5 +1,6 @@
 
 export type SectionType = 'PALLAMANO' | 'LAVORO' | 'PERSONALE';
+export type AccessLevel = 'VISUALIZZATORE' | 'OPERATORE';
 
 export interface ChatMessage {
   id?: string;
@@ -30,7 +31,9 @@ export interface UserPermission {
   id: string;
   user_id: string;
   sezione: SectionType;
+  sottosezione?: string;
   stato: PermissionStatus;
+  livello: AccessLevel;
   nome: string;
   cognome: string;
   chat_username: string;
@@ -92,7 +95,6 @@ export interface PlayerStats {
   parate: number;
   tiri_subiti: number;
   assist: number;
-  // Relazioni
   p_giocatori?: HandballPlayer;
 }
 
@@ -139,7 +141,6 @@ export interface LameStampo {
   lama_stampo_misura: number | null;
   lama_stampo_misura_attuale: number | null;
   lama_stampo_quantita: number | null;
-  // Relazioni per join Supabase
   l_lame_stampi_tipi?: LameStampoTipo;
   l_lame_stampi_serie?: LameStampoSerie;
 }

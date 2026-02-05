@@ -4,15 +4,20 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { 
-  LameStampo, LameStampoTipo, LameStampoSerie, Macchina 
+  LameStampo, LameStampoTipo, LameStampoSerie, Macchina, UserProfile, AccessLevel
 } from '../types';
 import { 
   ArrowLeft, Scissors, Plus, X, Pencil, Trash2, 
   RefreshCw, Search, Save, Settings2,
-  ChevronRight, Copy, History, AlertCircle, Layers
+  ChevronRight, Copy, History, AlertCircle, Layers, Eye
 } from 'lucide-react';
 
-const SlitterLame: React.FC = () => {
+interface Props {
+  profile: UserProfile | null;
+}
+
+const SlitterLame: React.FC<Props> = ({ profile }) => {
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>('VISUALIZZATORE');
   const [lame, setLame] = useState<LameStampo[]>([]);
   const [tipi, setTipi] = useState<LameStampoTipo[]>([]);
   const [serie, setSerie] = useState<LameStampoSerie[]>([]);
@@ -22,6 +27,8 @@ const SlitterLame: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingLama, setEditingLama] = useState<LameStampo | null>(null);
   
+  const isOperator = profile?.role === 'ADMIN' || accessLevel === 'OPERATORE';
+
   const [formData, setFormData] = useState<Partial<LameStampo>>({
     lama_stampo_tipo: 0,
     lama_stampo_serie: null,
@@ -30,6 +37,21 @@ const SlitterLame: React.FC = () => {
     lama_stampo_misura_attuale: 0,
     lama_stampo_quantita: 1
   });
+
+  const fetchAccess = useCallback(async () => {
+    if (profile?.role === 'ADMIN') {
+      setAccessLevel('OPERATORE');
+      return;
+    }
+    const { data } = await supabase
+      .from('l_permessi')
+      .select('livello')
+      .eq('user_id', profile?.id)
+      .eq('sezione', 'LAVORO')
+      .eq('sottosezione', 'SLITTER_LAME')
+      .maybeSingle();
+    if (data) setAccessLevel(data.livello as AccessLevel);
+  }, [profile]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -53,10 +75,12 @@ const SlitterLame: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    fetchAccess();
     fetchData();
-  }, [fetchData]);
+  }, [fetchAccess, fetchData]);
 
   const handleSave = async (e: React.FormEvent) => {
+    if (!isOperator) return;
     e.preventDefault();
     if (!formData.lama_stampo_tipo || formData.lama_stampo_tipo === 0) {
       alert("Seleziona un tipo di lama/stampo");
@@ -96,7 +120,7 @@ const SlitterLame: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Sei sicuro di voler eliminare questo elemento?")) return;
+    if (!isOperator || !confirm("Sei sicuro di voler eliminare questo elemento?")) return;
     setLoading(true);
     const { error } = await supabase.from('l_lame_stampi').delete().eq('id_lama_stampo', id);
     if (!error) fetchData();
@@ -105,6 +129,7 @@ const SlitterLame: React.FC = () => {
   };
 
   const handleDuplicate = (lama: LameStampo) => {
+    if (!isOperator) return;
     setEditingLama(null);
     setFormData({
       lama_stampo_tipo: lama.lama_stampo_tipo,
@@ -140,7 +165,6 @@ const SlitterLame: React.FC = () => {
       }
     });
 
-    // Ordina all'interno dei gruppi
     Object.keys(groups).forEach(tk => {
       groups[tk].standalone.sort((a, b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
       Object.keys(groups[tk].series).forEach(sk => {
@@ -154,6 +178,12 @@ const SlitterLame: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#060a14] text-slate-100 pb-20">
       
+      {!isOperator && (
+        <div className="bg-amber-600 p-2 text-center text-slate-950 font-black text-[9px] uppercase tracking-[0.4em] flex items-center justify-center gap-4">
+           <Eye size={12} /> MODALITÀ SOLA LETTURA - FUNZIONI DI MODIFICA DISABILITATE <Eye size={12} />
+        </div>
+      )}
+
       {/* Header compattato ed elegante */}
       <div className="relative pt-12 pb-24 px-6 overflow-hidden border-b border-white/5 bg-slate-900/40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_-20%,_rgba(99,102,241,0.15),_transparent_50%)]"></div>
@@ -185,22 +215,24 @@ const SlitterLame: React.FC = () => {
             </div>
           </div>
 
-          <button 
-            onClick={() => { 
-              setEditingLama(null); 
-              setFormData({ 
-                lama_stampo_tipo: tipi[0]?.id_tipo_lama_stampo || 0, 
-                id_macchina: 'SLP', 
-                lama_stampo_misura: 0, 
-                lama_stampo_misura_attuale: 0,
-                lama_stampo_quantita: 1 
-              }); 
-              setShowModal(true); 
-            }}
-            className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest flex items-center gap-3 shadow-2xl active:scale-95 transition-all"
-          >
-            <Plus size={18} /> Nuova Registrazione
-          </button>
+          {isOperator && (
+            <button 
+              onClick={() => { 
+                setEditingLama(null); 
+                setFormData({ 
+                  lama_stampo_tipo: tipi[0]?.id_tipo_lama_stampo || 0, 
+                  id_macchina: 'SLP', 
+                  lama_stampo_misura: 0, 
+                  lama_stampo_misura_attuale: 0,
+                  lama_stampo_quantita: 1 
+                }); 
+                setShowModal(true); 
+              }}
+              className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest flex items-center gap-3 shadow-2xl active:scale-95 transition-all"
+            >
+              <Plus size={18} /> Nuova Registrazione
+            </button>
+          )}
         </div>
       </div>
 
@@ -269,9 +301,15 @@ const SlitterLame: React.FC = () => {
                                       </td>
                                       <td className="px-4 py-4 text-right">
                                          <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
-                                            <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
-                                            <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
+                                            {isOperator ? (
+                                              <>
+                                                <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
+                                                <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
+                                                <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
+                                              </>
+                                            ) : (
+                                              <Eye size={12} className="text-slate-600" />
+                                            )}
                                          </div>
                                       </td>
                                    </tr>
@@ -318,9 +356,15 @@ const SlitterLame: React.FC = () => {
                                       </td>
                                       <td className="px-4 py-4 text-right">
                                          <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
-                                            <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
-                                            <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
+                                            {isOperator ? (
+                                              <>
+                                                <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
+                                                <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
+                                                <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
+                                              </>
+                                            ) : (
+                                              <Eye size={12} className="text-slate-600" />
+                                            )}
                                          </div>
                                       </td>
                                    </tr>
@@ -336,8 +380,7 @@ const SlitterLame: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal Registrazione */}
-      {showModal && (
+      {showModal && isOperator && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 z-[2000] animate-in zoom-in-95 duration-200">
            <div className="bg-[#1e293b] border border-white/10 rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden">
               <div className="px-10 py-10 border-b border-white/5 flex justify-between items-center bg-indigo-600/5">
@@ -425,7 +468,7 @@ const SlitterLame: React.FC = () => {
                  <button 
                    type="submit"
                    disabled={loading}
-                   className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 mt-6"
+                   className="w-full py-6 bg-indigo-600 text-white font-black rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 mt-6"
                  >
                     {loading ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
                     {editingLama ? 'Salva Modifiche' : 'Registra Elemento'}
@@ -441,13 +484,6 @@ const SlitterLame: React.FC = () => {
            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 animate-pulse italic text-center px-6">Sincronizzazione registro tecnico...</p>
         </div>
       )}
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.2); }
-      `}</style>
     </div>
   );
 };
