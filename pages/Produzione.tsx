@@ -189,7 +189,7 @@ const Produzione: React.FC = () => {
                              </div>
                           </div>
                           <div>
-                            <h4 className="text-xl font-bold text-white uppercase tracking-tight leading-none truncate max-w-[280px]">{l.l_clienti?.cliente}</h4>
+                            <h4 className="text-2xl font-bold text-white uppercase tracking-tight leading-none truncate max-w-[280px]">{l.l_clienti?.cliente}</h4>
                             <div className="flex items-center gap-2 mt-2">
                                <div className={`w-1.5 h-1.5 rounded-full ${isPro ? 'bg-sky-400 animate-pulse' : isPre ? 'bg-slate-400' : 'bg-emerald-400'}`}></div>
                                <p className="text-[9px] font-black text-white/60 uppercase tracking-widest">{l.l_fasi_di_lavorazione?.fase_di_lavorazione || 'ATTESA SETUP'}</p>
@@ -253,10 +253,9 @@ const Produzione: React.FC = () => {
                            <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
                            <div className="flex gap-2">
                              <span className="bg-amber-600/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-100 uppercase border border-amber-600/30">{l.mcoil_lega} <span className="opacity-50">{l.mcoil_stato_fisico}</span></span>
-                             <span className="bg-white/10 px-2 py-0.5 rounded text-[8px] font-bold text-white/60 uppercase">{l.spessore} MM</span>
                            </div>
                         </div>
-                        <h4 className="text-base font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
+                        <h4 className="text-xl font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
                         {l.data_consegna && (
                           <div className="flex items-center gap-1.5">
                             <Calendar size={10} className="text-amber-500" />
@@ -266,12 +265,16 @@ const Produzione: React.FC = () => {
                      </div>
 
                      <div className="flex items-center gap-10">
-                        <div className="flex gap-10 text-right">
-                           <div>
+                        <div className="flex gap-10 text-right items-center">
+                           <div className="text-center">
                               <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">ORDINATO KG</span>
                               <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
                            </div>
-                           <div>
+                           <div className="text-center">
+                              <span className="text-[9px] font-bold text-sky-400/60 uppercase block mb-1">SPESSORE</span>
+                              <span className="text-base font-black text-sky-400 italic tabular-nums">{l.spessore}</span>
+                           </div>
+                           <div className="text-center">
                               <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">MISURA</span>
                               <span className="text-2xl font-black text-amber-400 italic tabular-nums">{l.misura}</span>
                            </div>
