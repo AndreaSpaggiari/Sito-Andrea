@@ -113,7 +113,7 @@ const Produzione: React.FC = () => {
         if (sortCriteria === 'scheda') return a.scheda - b.scheda;
         if (sortCriteria === 'cliente') return (a.l_clienti?.cliente || '').localeCompare(b.l_clienti?.cliente || '');
         if (sortCriteria === 'misura') return a.misura - b.misura;
-        if (sortCriteria === 'data') return (a.data_consegna || '9999').localeCompare(b.data_consegna || '9999');
+        if (sortCriteria === 'data') return (a.data_consegna || '9999-12-31').localeCompare(b.data_consegna || '9999-12-31');
         return 0;
       });
   }, [lavorazioni, sortCriteria]);
@@ -170,7 +170,6 @@ const Produzione: React.FC = () => {
                  const isPre = l.id_stato === Stati.PRE;
                  const isTer = l.id_stato === Stati.TER;
                  
-                 // Colori di sfondo richiesti (azzurro, grigio, verde chiaro)
                  const cardBg = isPro ? 'bg-sky-400/20 border-sky-400/30 shadow-[0_0_20px_rgba(56,189,248,0.1)]' : 
                                isPre ? 'bg-slate-400/20 border-slate-400/30' : 
                                'bg-emerald-400/20 border-emerald-400/30';
@@ -187,9 +186,6 @@ const Produzione: React.FC = () => {
                                 <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-white uppercase border border-white/20">
                                   {l.mcoil_lega} <span className="opacity-60 ml-1">{l.mcoil_stato_fisico}</span>
                                 </span>
-                                <span className="bg-white/10 px-2.5 py-1 rounded-lg text-[9px] font-bold text-sky-300 uppercase border border-sky-400/30">
-                                  {l.spessore} MM
-                                </span>
                              </div>
                           </div>
                           <div>
@@ -202,10 +198,14 @@ const Produzione: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-10">
-                           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                           <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                               <div className="text-center">
                                  <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">ORDINATO KG</span>
                                  <span className="text-xl font-black text-white italic">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
+                              </div>
+                              <div className="text-center">
+                                 <span className="text-[9px] font-bold text-sky-400/60 uppercase block mb-1">SPESSORE</span>
+                                 <span className="text-xl font-black text-sky-400 italic">{l.spessore} <span className="text-[10px] opacity-40 not-italic">MM</span></span>
                               </div>
                               <div className="text-center">
                                  <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">MISURA</span>
@@ -239,7 +239,7 @@ const Produzione: React.FC = () => {
                    <h2 className="font-black uppercase italic tracking-widest text-base">CODA ATTESA</h2>
                 </div>
                 <div className="flex gap-2">
-                   {['SCHEDA', 'CLIENTE', 'MISURA'].map(c => (
+                   {['SCHEDA', 'CLIENTE', 'MISURA', 'DATA'].map(c => (
                      <button key={c} onClick={() => setSortCriteria(c.toLowerCase() as any)} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${sortCriteria === c.toLowerCase() ? 'bg-amber-600 text-slate-950' : 'bg-white/5 text-white/40 hover:text-white'}`}>{c}</button>
                    ))}
                 </div>
@@ -247,7 +247,7 @@ const Produzione: React.FC = () => {
 
              <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
                 {attItems.map(l => (
-                  <div key={l.id_lavorazione} className="bg-amber-400/20 border border-amber-400/30 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/30 transition-all">
+                  <div key={l.id_lavorazione} className="bg-amber-400/20 border border-amber-400/30 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/30 transition-all relative">
                      <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-4">
                            <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
@@ -257,6 +257,12 @@ const Produzione: React.FC = () => {
                            </div>
                         </div>
                         <h4 className="text-base font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
+                        {l.data_consegna && (
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={10} className="text-amber-500" />
+                            <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">D.Cli: {formatDateForDisplay(l.data_consegna)}</span>
+                          </div>
+                        )}
                      </div>
 
                      <div className="flex items-center gap-10">
@@ -400,10 +406,6 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
     if (p <= 0 || sp <= 0 || mi <= 0) return 0;
     const rho = (lavorazione.mcoil_lega || '').toUpperCase().includes('OT') ? 8.50 : 8.96;
     
-    // FORMULA RICHIESTA: 
-    // 1. Trovo i metri del singolo pezzo
-    // 2. Moltiplico per le passate/nastri
-    // pz è il numero di pezzi in lunghezza, quindi il peso per ogni set di pz è p/pz
     const metriPerPezzo = (p * 1000) / (rho * sp * mi * pz);
     const metriTotali = metriPerPezzo * n;
     

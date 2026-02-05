@@ -96,7 +96,7 @@ export interface PlayerStats {
   p_giocatori?: HandballPlayer;
 }
 
-// Tipi Produzione (Invariati)
+// Tipi Produzione
 export interface Macchina { id_macchina: string; macchina: string; }
 export interface FaseLavorazione { id_fase: string; fase_di_lavorazione: string; }
 export interface Cliente { id_cliente: string; cliente: string; }
@@ -128,6 +128,30 @@ export interface Lavorazione {
   l_clienti?: Cliente;
   l_macchine?: Macchina;
   l_fasi_di_lavorazione?: FaseLavorazione;
+}
+
+// Nuovi Tipi Lame e Stampi (Basati sui tuoi schemi ufficiali)
+export interface LameStampo {
+  id_lama_stampo: number;
+  lama_stampo_tipo: number;
+  lama_stampo_serie: number | null;
+  id_macchina: string | null;
+  lama_stampo_misura: number | null;
+  lama_stampo_quantita: number | null;
+  // Relazioni per join Supabase
+  l_lame_stampi_tipi?: LameStampoTipo;
+  l_lame_stampi_serie?: LameStampoSerie;
+}
+
+export interface LameStampoTipo {
+  id_tipo_lama_stampo: number;
+  tipo_lama_stampo: string;
+  descrizione_tipo_lama_stampo: string | null;
+}
+
+export interface LameStampoSerie {
+  id_lama_stampo_serie: number;
+  lama_stampo_serie: string;
 }
 
 export enum Stati { PRE = 'PRE', ATT = 'ATT', PRO = 'PRO', EXT = 'EXT', TER = 'TER' }

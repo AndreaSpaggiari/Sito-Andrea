@@ -32,7 +32,15 @@ const MACHINE_CONFIG: Record<string, { color: string; icon: any; tools: { label:
   'SBAVATRICE VECCHIA': { color: 'border-amber-700', icon: Hammer, tools: [{ label: 'ATTREZZI', icon: Settings, link: '#' }, { label: 'MANUTENZIONE', icon: Wrench, link: '#' }] },
   'SLITTER GRANDE': { color: 'border-indigo-700', icon: Scissors, tools: [{ label: 'MANUTENZIONE', icon: Wrench, link: '#' }, { label: 'STATISTICHE', icon: BarChart3, link: '#' }] },
   'SLITTER NUOVO': { color: 'border-indigo-500', icon: Scissors, tools: [{ label: 'LAME', icon: Scissors, link: '#' }, { label: 'MANUTENZIONE', icon: Wrench, link: '#' }] },
-  'SLITTER PICCOLO': { color: 'border-indigo-400', icon: Scissors, tools: [{ label: 'LAME', icon: Scissors, link: '/lavoro/slitter-piccolo' }, { label: 'UTILITÀ', icon: Laptop, link: '/lavoro/slitter-piccolo' }, { label: 'STATISTICHE', icon: BarChart3, link: '/lavoro/slitter-piccolo' }] },
+  'SLITTER PICCOLO': { 
+    color: 'border-indigo-400', 
+    icon: Scissors, 
+    tools: [
+      { label: 'LAME', icon: Scissors, link: '/lavoro/slitter-piccolo/lame' }, 
+      { label: 'UTILITÀ', icon: Laptop, link: '/lavoro/slitter-piccolo' }, 
+      { label: 'STATISTICHE', icon: BarChart3, link: '/lavoro/slitter-piccolo' }
+    ] 
+  },
   'STAMPATRICE': { color: 'border-rose-500', icon: Box, tools: [{ label: 'STAMPI', icon: Box, link: '#' }, { label: 'UTILITÀ', icon: Laptop, link: '#' }] }
 };
 

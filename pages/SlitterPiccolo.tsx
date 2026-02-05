@@ -15,35 +15,40 @@ const SlitterPiccolo: React.FC = () => {
       desc: "Usura, Affilatura & Inventario",
       icon: Scissors,
       color: "bg-indigo-600",
-      status: "8 Lame Attive"
+      status: "Configurazione",
+      link: "/lavoro/slitter-piccolo/lame"
     },
     {
       title: "COMBINAZIONI",
       desc: "Calcolo Distanziali & Setup",
       icon: Layers,
       color: "bg-blue-600",
-      status: "Configurato"
+      status: "Configurato",
+      link: "#"
     },
     {
       title: "UTILITÀ",
       desc: "Toolkit Operativo",
       icon: Laptop,
       color: "bg-emerald-600",
-      status: "5 Tool Pronti"
+      status: "5 Tool Pronti",
+      link: "#"
     },
     {
       title: "MANUTENZIONE",
       desc: "Log Interventi & Scadenze",
       icon: Wrench,
       color: "bg-slate-700",
-      status: "Ok - 12/03"
+      status: "Ok - 12/03",
+      link: "#"
     },
     {
       title: "STATISTICHE",
       desc: "Analisi Produzione & KPI",
       icon: BarChart3,
       color: "bg-rose-600",
-      status: "Aggiornate"
+      status: "Aggiornate",
+      link: "#"
     }
   ];
 
@@ -72,8 +77,9 @@ const SlitterPiccolo: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 -mt-16 relative z-20">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {tools.map((tool, idx) => (
-            <div 
+            <Link 
               key={idx} 
+              to={tool.link}
               className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-200 group hover:border-indigo-500/50 transition-all duration-500 flex flex-col relative overflow-hidden cursor-pointer"
             >
               <div className="flex justify-between items-start mb-6 relative z-10">
@@ -94,7 +100,7 @@ const SlitterPiccolo: React.FC = () => {
                    <ChevronRight size={14} className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
 
