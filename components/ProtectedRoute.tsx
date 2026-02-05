@@ -109,20 +109,24 @@ const AccessDeniedScreen = ({ section, subsection, status, userEmail, userId, on
     setRequesting(true);
     setError(null);
     try {
-      // Inseriamo una richiesta "Master" per la sezione LAVORO (o altra sezione)
-      // Senza sottosezione specifica, sarà Andrea a configurarla
       const { error: upsertError } = await supabase
         .from('l_permessi')
         .upsert({ 
           user_id: userId, 
           sezione: section, 
-          sottosezione: null, // Richiesta master
+          sottosezione: null,
           stato: 'RICHIESTO',
-          livello: 'VISUALIZZATORE', // Default temporaneo
+          livello: 'VISUALIZZATORE',
           ...personalData
         }, { onConflict: 'user_id,sezione,sottosezione' });
       
-      if (upsertError) throw upsertError;
+      if (upsertError) {
+        // Messaggio specifico per l'errore di vincolo mancante
+        if (upsertError.message.includes('unique_user_section_sub') || upsertError.message.includes('ON CONFLICT')) {
+           throw new Error("Errore Database: Manca il vincolo di unicità. Esegui lo script SQL aggiornato nel pannello Supabase.");
+        }
+        throw upsertError;
+      }
       setDone(true);
     } catch (e: any) {
       setError(e.message || "Errore durante l'invio della richiesta");
