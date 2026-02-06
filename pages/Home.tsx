@@ -50,8 +50,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Stato per la configurazione dei permessi durante l'approvazione
-  // Mappa user_id -> sottosezione -> livello
   const [adminConfig, setAdminConfig] = useState<Record<string, Record<string, AccessLevel | 'NONE'>>>({});
 
   const fetchRequests = useCallback(async () => {
@@ -71,7 +69,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
         }));
         setRequests(combined as any[]);
 
-        // Inizializza adminConfig per le nuove richieste
         const initialConfig = { ...adminConfig };
         combined.forEach(req => {
           if (req.sezione === 'LAVORO' && !initialConfig[req.user_id]) {
@@ -95,57 +92,69 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
   }, [profile, fetchRequests]);
 
   const handleUpdatePermission = async (req: PendingRequest, newState: 'AUTORIZZATO' | 'NEGATO') => {
-    if (newState === 'NEGATO') {
-      const { error } = await supabase.from('l_permessi').update({ stato: newState }).eq('id', req.id);
-      if (!error) fetchRequests();
-      return;
-    }
+    setLoadingRequests(true);
+    try {
+      if (newState === 'NEGATO') {
+        await supabase.from('l_permessi').update({ stato: newState }).eq('id', req.id);
+        fetchRequests();
+        return;
+      }
 
-    // Se stiamo autorizzando LAVORO, creiamo i permessi granulari configurati
-    if (req.sezione === 'LAVORO' && newState === 'AUTORIZZATO') {
-      const config = adminConfig[req.user_id];
-      if (!config) return;
+      if (req.sezione === 'LAVORO' && newState === 'AUTORIZZATO') {
+        const config = adminConfig[req.user_id];
+        if (!config) return;
 
-      const rowsToInsert = SUBSECTIONS_LAVORO
-        .filter(sub => config[sub.id] !== 'NONE')
-        .map(sub => ({
+        // 1. Pulizia preventiva: Cancelliamo TUTTE le righe pendenti dell'utente per questa sezione
+        // per evitare conflitti di unicità o duplicati orfani
+        await supabase
+          .from('l_permessi')
+          .delete()
+          .eq('user_id', req.user_id)
+          .eq('sezione', 'LAVORO');
+
+        // 2. Prepariamo i nuovi permessi autorizzati
+        const rowsToInsert = SUBSECTIONS_LAVORO
+          .filter(sub => config[sub.id] !== 'NONE')
+          .map(sub => ({
+            user_id: req.user_id,
+            sezione: 'LAVORO',
+            sottosezione: sub.id,
+            stato: 'AUTORIZZATO',
+            livello: config[sub.id] as AccessLevel,
+            nome: req.nome,
+            cognome: req.cognome,
+            chat_username: req.chat_username,
+            motivo: req.motivo
+          }));
+
+        // Aggiungiamo sempre una riga "Master" autorizzata (sottosezione NULL)
+        // Questo sblocca l'accesso all'hub principale /lavoro
+        rowsToInsert.push({
           user_id: req.user_id,
           sezione: 'LAVORO',
-          sottosezione: sub.id,
+          sottosezione: null,
           stato: 'AUTORIZZATO',
-          livello: config[sub.id] as AccessLevel,
+          livello: 'VISUALIZZATORE',
           nome: req.nome,
           cognome: req.cognome,
           chat_username: req.chat_username,
           motivo: req.motivo
-        }));
+        } as any);
 
-      // Aggiungiamo anche il record master per sbloccare l'hub
-      rowsToInsert.push({
-        user_id: req.user_id,
-        sezione: 'LAVORO',
-        sottosezione: null,
-        stato: 'AUTORIZZATO',
-        livello: 'VISUALIZZATORE',
-        nome: req.nome,
-        cognome: req.cognome,
-        chat_username: req.chat_username,
-        motivo: req.motivo
-      } as any);
-
-      const { error: batchError } = await supabase.from('l_permessi').upsert(rowsToInsert, { onConflict: 'user_id,sezione,sottosezione' });
-      if (batchError) {
-        alert("Errore salvataggio permessi granulari: " + batchError.message);
-        return;
+        // 3. Salviamo il pacchetto completo
+        const { error: batchError } = await supabase.from('l_permessi').insert(rowsToInsert);
+        if (batchError) throw batchError;
+        
+        fetchRequests();
+      } else {
+        // Autorizzazione standard (Pallamano o Personale)
+        await supabase.from('l_permessi').update({ stato: newState }).eq('id', req.id);
+        fetchRequests();
       }
-      
-      // Eliminiamo eventuali altre richieste pendenti master dello stesso utente se presenti (o le aggiorniamo)
-      await supabase.from('l_permessi').update({ stato: 'AUTORIZZATO' }).eq('id', req.id);
-      fetchRequests();
-    } else {
-      // Autorizzazione standard per altre sezioni
-      const { error } = await supabase.from('l_permessi').update({ stato: newState }).eq('id', req.id);
-      if (!error) fetchRequests();
+    } catch (e: any) {
+      alert("Errore durante l'approvazione: " + e.message);
+    } finally {
+      setLoadingRequests(false);
     }
   };
 
@@ -167,8 +176,6 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
     r.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.cognome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const isGuest = !session;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 overflow-x-hidden">
@@ -284,7 +291,7 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                       </div>
                     </div>
 
-                    {/* Colonna Centrale: Configuratore Permessi (Solo per LAVORO) */}
+                    {/* Colonna Centrale: Configuratore Permessi */}
                     <div className="flex-grow">
                       {req.sezione === 'LAVORO' && req.stato === 'RICHIESTO' ? (
                         <div className="space-y-4">
@@ -336,10 +343,18 @@ const Home: React.FC<Props> = ({ profile, session, onRefresh }) => {
                     <div className="lg:w-48 flex flex-col gap-3 justify-center">
                       {req.stato === 'RICHIESTO' && (
                         <>
-                          <button onClick={() => handleUpdatePermission(req, 'AUTORIZZATO')} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-all active:scale-95">
+                          <button 
+                            onClick={() => handleUpdatePermission(req, 'AUTORIZZATO')} 
+                            disabled={loadingRequests}
+                            className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50"
+                          >
                             <Check size={16} /> Approva
                           </button>
-                          <button onClick={() => handleUpdatePermission(req, 'NEGATO')} className="w-full py-5 bg-slate-800 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-600 hover:text-white transition-all active:scale-95">
+                          <button 
+                            onClick={() => handleUpdatePermission(req, 'NEGATO')} 
+                            disabled={loadingRequests}
+                            className="w-full py-5 bg-slate-800 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+                          >
                             <X size={16} /> Nega
                           </button>
                         </>

@@ -33,6 +33,7 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, subsectio
     }
 
     try {
+      setLoading(true);
       let query = supabase
         .from('l_permessi')
         .select('stato, livello')
@@ -40,15 +41,36 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, subsectio
         .eq('sezione', section);
       
       if (subsection) {
+        // Se cerchiamo una sottosezione specifica (es. PRODUZIONE)
         query = query.eq('sottosezione', subsection);
       } else {
-        query = query.is('sottosezione', null);
+        // Se siamo nell'HUB principale, basta che l'utente sia autorizzato in ALMENO una parte di questa sezione
+        query = query.eq('stato', 'AUTORIZZATO');
       }
 
-      const { data } = await query.maybeSingle();
+      // Usiamo .limit(1) invece di maybeSingle per evitare errori in caso di record multipli "sporchi"
+      const { data, error } = await query.limit(1);
       
-      if (data) setPermInfo(data as { stato: PermissionStatus, livello: AccessLevel });
-      else setPermInfo(null);
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setPermInfo(data[0] as { stato: PermissionStatus, livello: AccessLevel });
+      } else {
+        // Se non trova nulla, controlliamo se esiste almeno una richiesta pendente per mostrare lo stato corretto
+        const { data: pending } = await supabase
+          .from('l_permessi')
+          .select('stato')
+          .eq('user_id', session.user.id)
+          .eq('sezione', section)
+          .eq('stato', 'RICHIESTO')
+          .limit(1);
+        
+        if (pending && pending.length > 0) {
+          setPermInfo({ stato: 'RICHIESTO', livello: 'VISUALIZZATORE' });
+        } else {
+          setPermInfo(null);
+        }
+      }
     } catch (e) {
       console.error("Errore verifica permessi:", e);
     } finally {
@@ -66,11 +88,12 @@ const ProtectedRoute: React.FC<Props> = ({ children, session, section, subsectio
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#060a14]">
         <RefreshCw className="animate-spin text-blue-500 mb-4" size={40} />
-        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Sincronizzazione Credenziali...</p>
+        <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Verifica Autorizzazioni...</p>
       </div>
     );
   }
 
+  // Se l'utente non è autorizzato o non ha permessi, mostriamo lo schermo di blocco
   if (profile?.role !== 'ADMIN' && (!permInfo || permInfo.stato !== 'AUTORIZZATO')) {
     return (
       <AccessDeniedScreen 
@@ -99,6 +122,11 @@ const AccessDeniedScreen = ({ section, subsection, status, userEmail, userId, on
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(status === 'RICHIESTO');
 
+  // Se lo stato cambia esternamente, aggiorniamo il componente
+  useEffect(() => {
+    setDone(status === 'RICHIESTO');
+  }, [status]);
+
   const requestAccess = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!personalData.nome || !personalData.cognome || !personalData.chat_username) {
@@ -121,13 +149,13 @@ const AccessDeniedScreen = ({ section, subsection, status, userEmail, userId, on
         }, { onConflict: 'user_id,sezione,sottosezione' });
       
       if (upsertError) {
-        // Messaggio specifico per l'errore di vincolo mancante
         if (upsertError.message.includes('unique_user_section_sub') || upsertError.message.includes('ON CONFLICT')) {
-           throw new Error("Errore Database: Manca il vincolo di unicità. Esegui lo script SQL aggiornato nel pannello Supabase.");
+           throw new Error("Errore Configurazione Database: Esegui lo script SQL di unicità.");
         }
         throw upsertError;
       }
       setDone(true);
+      onRefresh(); // Controlliamo subito se per caso l'admin ha già approvato
     } catch (e: any) {
       setError(e.message || "Errore durante l'invio della richiesta");
     } finally {
@@ -155,12 +183,21 @@ const AccessDeniedScreen = ({ section, subsection, status, userEmail, userId, on
               <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20 shadow-inner">
                 <Clock size={40} className="animate-pulse" />
               </div>
-              <p className="text-xl font-black text-white uppercase italic tracking-tighter mb-4">Richiesta Ricevuta</p>
+              <p className="text-xl font-black text-white uppercase italic tracking-tighter mb-4">In Attesa di Andrea</p>
               <p className="text-slate-400 text-xs font-bold uppercase tracking-widest max-w-xs leading-relaxed mb-10">
-                Andrea ha ricevuto la tua richiesta per la sezione <span className="text-indigo-400">{section}</span>. <br/>Verrai abilitato alle aree di competenza a breve.
+                La tua richiesta è stata inviata. <br/>Andrea ti abiliterà non appena possibile.
               </p>
               <div className="flex flex-col gap-4 w-full">
-                <button onClick={onRefresh} className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 transition-all">
+                <button 
+                  onClick={() => {
+                    onRefresh();
+                    // Feedback visivo immediato al click
+                    setRequesting(true);
+                    setTimeout(() => setRequesting(false), 1000);
+                  }} 
+                  className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-3"
+                >
+                  {requesting ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />}
                   Controlla Stato Attivazione
                 </button>
                 <Link to="/" className="text-[10px] font-black text-white/20 hover:text-white uppercase tracking-[0.3em] transition-colors mt-2">Torna alla Home</Link>
