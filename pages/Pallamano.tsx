@@ -1,26 +1,33 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { HandballMatch, UserProfile, HandballStanding, HandballPlayer, PlayerStats } from '../types';
 import { 
   Trophy, Calendar, Plus, X, Trash2, RefreshCw, ListOrdered, Users, 
   UserPlus, Pencil, Zap, ChevronDown, Check,
-  ChevronRight, CalendarDays, Save, TrendingUp, ShieldAlert, Percent, Activity
+  ChevronRight, Save, TrendingUp, Activity, Timer, Play, Pause, RotateCcw, Settings, ArrowDown, ArrowUp
 } from 'lucide-react';
 
 interface Props {
   profile?: UserProfile | null;
 }
 
-type TabType = 'CLASSIFICA' | 'CALENDARIO' | 'ROSA' | 'STATS';
+type TabType = 'CLASSIFICA' | 'CALENDARIO' | 'ROSA' | 'STATS' | 'CRONOMETRO';
 
 const Pallamano: React.FC<Props> = ({ profile }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('CLASSIFICA');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const saved = localStorage.getItem('palla_active_tab');
+    return (saved as TabType) || 'CLASSIFICA';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('palla_active_tab', activeTab);
+  }, [activeTab]);
+
   const [matches, setMatches] = useState<HandballMatch[]>([]);
   const [players, setPlayers] = useState<HandballPlayer[]>([]);
   const [stats, setStats] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(true);
-  
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
 
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -47,6 +54,77 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
 
   const [statForm, setStatForm] = useState<Partial<PlayerStats>>(initialStatState);
 
+  // --- LOGICA CRONOMETRO PERSISTENTE ---
+  const [baseTime, setBaseTime] = useState(() => Number(localStorage.getItem('palla_base_seconds')) || 1800);
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => Number(localStorage.getItem('palla_elapsed_seconds')) || 0);
+  const [isRunning, setIsRunning] = useState(() => localStorage.getItem('palla_is_running') === 'true');
+  const timerRef = useRef<any>(null);
+
+  // Sincronizzazione Tempo Offline al mount
+  useEffect(() => {
+    if (isRunning) {
+      const lastTimestamp = Number(localStorage.getItem('palla_last_timestamp'));
+      if (lastTimestamp) {
+        const now = Date.now();
+        const diffSeconds = Math.floor((now - lastTimestamp) / 1000);
+        if (diffSeconds > 0) {
+          const newElapsed = elapsedSeconds + diffSeconds;
+          setElapsedSeconds(newElapsed);
+          localStorage.setItem('palla_elapsed_seconds', newElapsed.toString());
+        }
+      }
+    }
+  }, []);
+
+  // Gestione Tick
+  useEffect(() => {
+    if (isRunning) {
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds(prev => {
+          const next = prev + 1;
+          localStorage.setItem('palla_elapsed_seconds', next.toString());
+          localStorage.setItem('palla_last_timestamp', Date.now().toString());
+          return next;
+        });
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    
+    localStorage.setItem('palla_is_running', isRunning.toString());
+    localStorage.setItem('palla_last_timestamp', Date.now().toString());
+
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isRunning]);
+
+  const formatTime = (totalSeconds: number) => {
+    const isNegative = totalSeconds < 0;
+    const absSeconds = Math.abs(totalSeconds);
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
+    return `${isNegative ? '-' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleTimer = () => setIsRunning(!isRunning);
+
+  const resetTimer = () => {
+    if (confirm("Azzerare tutto il cronometro?")) {
+      setIsRunning(false);
+      setElapsedSeconds(0);
+      localStorage.setItem('palla_elapsed_seconds', '0');
+      localStorage.setItem('palla_is_running', 'false');
+      localStorage.removeItem('palla_last_timestamp');
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  };
+
+  const updateBaseTime = (mins: number, secs: number) => {
+    const total = (mins * 60) + secs;
+    setBaseTime(total);
+    localStorage.setItem('palla_base_seconds', total.toString());
+  };
+
+  // --- LOGICA DATI PALLAMANO ---
   const isAdmin = profile?.role === 'ADMIN';
 
   const fetchData = useCallback(async () => {
@@ -54,10 +132,8 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
     try {
       const { data: mData } = await supabase.from('p_partite').select('*').order('data_partita', { ascending: true });
       setMatches(mData || []);
-
       const { data: pData } = await supabase.from('p_giocatori').select('*').order('numero_di_maglia', { ascending: true });
       setPlayers(pData || []);
-
       const { data: sData } = await supabase.from('p_statistiche').select('*, p_giocatori(*)');
       setStats(sData || []);
     } catch (e: any) {
@@ -89,16 +165,11 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
         ...payload,
         id: editingStat?.id 
       }, { onConflict: 'player_id' });
-      
       if (error) throw error;
       setShowAddStat(false);
       setEditingStat(null);
       await fetchData();
-    } catch (e: any) { 
-      alert("Errore salvataggio: " + e.message); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (e: any) { alert("Errore salvataggio: " + e.message); } finally { setLoading(false); }
   };
 
   const handleSavePlayer = async () => {
@@ -190,7 +261,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
       }`}
     >
       <Icon size={18} className="mb-1" />
-      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+      <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
       {activeTab === id && <div className="absolute bottom-0 left-1/4 right-1/4 h-1 bg-blue-500 rounded-t-full shadow-[0_-4px_10px_rgba(59,130,246,0.5)]"></div>}
     </button>
   );
@@ -216,6 +287,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
           <TabLink id="CALENDARIO" label="Calendario" icon={Calendar} />
           <TabLink id="ROSA" label="Giocatori" icon={Users} />
           <TabLink id="STATS" label="Statistiche" icon={TrendingUp} />
+          <TabLink id="CRONOMETRO" label="Crono" icon={Timer} />
         </div>
 
         <div className="bg-slate-900/40 backdrop-blur-sm rounded-[3rem] shadow-xl p-2 sm:p-10 border border-white/5 min-h-[600px]">
@@ -270,8 +342,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                              </div>
                            </td>
                          </tr>
-                         
-                         {/* Dettaglio Risultati Squadra Espansa */}
                          {expandedTeam === t.squadra && (
                            <tr className="bg-transparent">
                              <td colSpan={11} className="px-4 py-2">
@@ -511,6 +581,119 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                </div>
             </div>
           )}
+
+          {activeTab === 'CRONOMETRO' && (
+            <div className="animate-in zoom-in duration-500 h-full flex flex-col items-center py-6 relative">
+              
+              {/* Reset Button Discreto in Angolo - Fissato e Funzionante */}
+              <div className="absolute top-0 right-0 p-4">
+                <button 
+                  onClick={resetTimer} 
+                  className="p-5 text-slate-500 hover:text-rose-500 transition-all bg-white/5 rounded-3xl border border-white/5 shadow-inner group active:scale-90 flex items-center gap-2"
+                  title="Azzera Tutto"
+                >
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Reset</span>
+                  <RotateCcw size={24} className="group-active:rotate-180 transition-transform" />
+                </button>
+              </div>
+
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">Dual Engine Sport Crono</h3>
+                <p className="text-blue-500 font-bold uppercase text-[8px] tracking-[0.4em] mt-1 italic">Sincronizzazione Real-Time Persistente</p>
+              </div>
+
+              {/* Doppia Visualizzazione Simultanea */}
+              <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 px-2">
+                 
+                 {/* Visualizzazione a Salire (Tempo di Gara) */}
+                 <div className={`relative p-10 rounded-[3.5rem] border-4 transition-all duration-300 flex flex-col items-center justify-center ${isRunning ? 'border-blue-500 shadow-[0_0_40px_rgba(59,130,246,0.2)] bg-blue-500/5' : 'border-white/5 bg-slate-950/50'}`}>
+                    <div className="flex items-center gap-2 mb-3 text-blue-400 font-black uppercase text-[10px] tracking-[0.2em]">
+                       <ArrowUp size={14} /> Tempo di Gara
+                    </div>
+                    <span className="text-7xl sm:text-[9rem] font-black tabular-nums italic tracking-tighter leading-none text-white drop-shadow-lg">
+                       {formatTime(elapsedSeconds)}
+                    </span>
+                 </div>
+
+                 {/* Visualizzazione a Scendere (Tempo Rimanente) */}
+                 <div className={`relative p-10 rounded-[3.5rem] border-4 transition-all duration-300 flex flex-col items-center justify-center ${isRunning ? 'border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)] bg-amber-500/5' : 'border-white/5 bg-slate-950/50'}`}>
+                    <div className="flex items-center gap-2 mb-3 text-amber-500 font-black uppercase text-[10px] tracking-[0.2em]">
+                       <ArrowDown size={14} /> Tempo Rimanente
+                    </div>
+                    {baseTime - elapsedSeconds <= 10 && baseTime - elapsedSeconds > 0 && isRunning && <div className="absolute inset-0 bg-rose-600/10 animate-pulse rounded-[3rem]"></div>}
+                    <span className={`text-7xl sm:text-[9rem] font-black tabular-nums italic tracking-tighter leading-none ${baseTime - elapsedSeconds <= 10 && baseTime - elapsedSeconds > 0 ? 'text-rose-500' : 'text-white/90'}`}>
+                       {formatTime(baseTime - elapsedSeconds)}
+                    </span>
+                 </div>
+              </div>
+
+              {/* Pulsante Master Start/Stop Gigante */}
+              <div className="w-full max-w-2xl px-4">
+                 <button 
+                   onClick={toggleTimer} 
+                   className={`w-full h-40 rounded-[3.5rem] flex items-center justify-center shadow-[0_25px_60px_rgba(0,0,0,0.6)] transition-all active:scale-95 border-b-[12px] ${
+                     isRunning 
+                       ? 'bg-slate-800 text-white border-slate-950' 
+                       : 'bg-blue-600 text-white border-blue-900 hover:bg-blue-500'
+                   }`}
+                 >
+                    {isRunning ? (
+                      <div className="flex items-center gap-6">
+                        <Pause size={64} fill="currentColor" />
+                        <span className="text-3xl font-black uppercase italic tracking-tighter">PAUSA GIOCO</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-6">
+                        <Play size={64} fill="currentColor" className="ml-2" />
+                        <span className="text-3xl font-black uppercase italic tracking-tighter">AVVIA GIOCO</span>
+                      </div>
+                    )}
+                 </button>
+              </div>
+
+              {/* Pannello Setup per Reimpostare */}
+              <div className="mt-12 bg-slate-900/60 p-10 rounded-[3.5rem] border border-white/5 w-full max-w-2xl shadow-2xl">
+                 <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                       <Settings size={20} className="text-slate-500" />
+                       <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Configurazione Incontro</h4>
+                    </div>
+                    <div className="flex gap-2">
+                       <button onClick={() => { updateBaseTime(30, 0); setElapsedSeconds(0); localStorage.setItem('palla_elapsed_seconds', '0'); }} className="px-5 py-2.5 bg-white/5 hover:bg-blue-600 rounded-2xl text-[11px] font-black transition-all uppercase border border-white/5">30m & Reset</button>
+                       <button onClick={() => { updateBaseTime(20, 0); setElapsedSeconds(0); localStorage.setItem('palla_elapsed_seconds', '0'); }} className="px-5 py-2.5 bg-white/5 hover:bg-blue-600 rounded-2xl text-[11px] font-black transition-all uppercase border border-white/5">20m & Reset</button>
+                    </div>
+                 </div>
+                 
+                 <div className="flex items-center gap-6">
+                    <div className="flex-1 flex gap-4">
+                       <div className="flex-1">
+                          <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-3 text-center">Durata Minuti</p>
+                          <input 
+                            type="number" 
+                            value={Math.floor(baseTime / 60)} 
+                            onChange={e => updateBaseTime(Math.max(0, parseInt(e.target.value) || 0), baseTime % 60)}
+                            className="w-full bg-slate-950 border border-white/5 rounded-3xl p-5 text-center font-black text-3xl text-white outline-none focus:border-blue-500 shadow-inner"
+                          />
+                       </div>
+                       <span className="text-4xl font-black text-slate-700 flex items-center pt-10">:</span>
+                       <div className="flex-1">
+                          <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-3 text-center">Secondi</p>
+                          <input 
+                            type="number" 
+                            value={baseTime % 60} 
+                            onChange={e => updateBaseTime(Math.floor(baseTime / 60), Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                            className="w-full bg-slate-950 border border-white/5 rounded-3xl p-5 text-center font-black text-3xl text-white outline-none focus:border-blue-500 shadow-inner"
+                          />
+                       </div>
+                    </div>
+                 </div>
+                 <div className="flex items-center gap-3 mt-8 p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10">
+                    <Check className="text-emerald-500" size={16} />
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-relaxed">Le modifiche alla durata vengono salvate istantaneamente. <br/>Per ricominciare da zero premi i tasti rapidi o usa il reset in alto.</p>
+                 </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -525,7 +708,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                </div>
                <button onClick={() => setShowAddStat(false)} className="text-slate-500 hover:text-white transition-colors p-2"><X /></button>
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -539,12 +721,10 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                     {players.map(p => <option key={p.id} value={p.id}>{p.numero_di_maglia} - {p.cognome} {p.nome}</option>)}
                   </select>
                 </div>
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-500 uppercase ml-2">Presenze</label><input type="number" value={statForm.presenze ?? 0} onChange={e => setStatForm({...statForm, presenze: parseInt(e.target.value)})} className="w-full p-3 bg-slate-950 border border-white/5 rounded-xl font-bold text-center text-white" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-slate-500 uppercase ml-2">Assist</label><input type="number" value={statForm.assist ?? 0} onChange={e => setStatForm({...statForm, assist: parseInt(e.target.value)})} className="w-full p-3 bg-slate-950 border border-white/5 rounded-xl font-bold text-center text-white" /></div>
                 </div>
-
                 <div className="p-5 bg-slate-950/50 rounded-3xl border border-white/5 space-y-4">
                   <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest text-center">Attacco (GOL)</p>
                   <div className="grid grid-cols-2 gap-4">
@@ -557,7 +737,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                   </div>
                 </div>
               </div>
-
               <div className="space-y-6">
                 <div className="p-5 bg-slate-950/50 rounded-3xl border border-white/5 space-y-4">
                   <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest text-center">Difesa / Portiere</p>
@@ -566,7 +745,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-500 uppercase ml-1">Tiri Subiti</label><input type="number" value={statForm.tiri_subiti ?? 0} onChange={e => setStatForm({...statForm, tiri_subiti: parseInt(e.target.value)})} className="w-full p-3 bg-slate-800 border border-white/5 rounded-xl font-bold text-center text-white" /></div>
                   </div>
                 </div>
-
                 <div className="p-5 bg-slate-950/50 rounded-3xl border border-white/5 space-y-4">
                   <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest text-center">Disciplina</p>
                   <div className="grid grid-cols-2 gap-4">
@@ -580,7 +758,6 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                 </div>
               </div>
             </div>
-
             <div className="mt-8 sm:mt-10 flex gap-4">
                <button onClick={() => setShowAddStat(false)} className="flex-1 py-5 bg-slate-800 text-slate-400 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">Annulla</button>
                <button onClick={handleSaveStat} className="flex-[2] py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
@@ -644,7 +821,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-500 ml-2">Ruoli</label>
-                    <input type="text" value={newPlayer.ruoli.join(', ')} onChange={e => setNewPlayer({...newPlayer, ruoli: e.target.value.split(', ')})} placeholder="Es: Portiere, Terzino" className="w-full p-4 bg-slate-950 border border-white/5 rounded-2xl font-bold text-white outline-none focus:border-blue-500 text-xs" />
+                    <input type="text" value={newPlayer.ruoli.join(', ')} onChange={e => setNewPlayer({...newPlayer, ruoli: e.target.value.split(', ')})} placeholder="Es: Portiere, Terzino" className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl font-bold text-white outline-none focus:border-blue-500 text-xs" />
                   </div>
                </div>
                <button onClick={handleSavePlayer} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl mt-4 active:scale-95 transition-all">Salva Atleta</button>
@@ -653,7 +830,7 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
         </div>
       )}
 
-      {loading && (
+      {loading && activeTab !== 'CRONOMETRO' && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
           <RefreshCw className="text-blue-500 animate-spin mb-4" size={50} />
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] animate-pulse">Sincronizzazione Dati...</p>
