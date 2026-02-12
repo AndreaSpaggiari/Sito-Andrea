@@ -29,7 +29,6 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
   const [editingLama, setEditingLama] = useState<LameStampo | null>(null);
   const [newSerieName, setNewSerieName] = useState('');
   
-  // Per lo Slitter Nuovo usiamo l'ID 'SLN' o quello salvato in localStorage se presente
   const currentMachineId = useMemo(() => localStorage.getItem('kme_selected_macchina') || 'SLN', []);
   const isOperator = profile?.role === 'ADMIN' || accessLevel === 'OPERATORE';
 
@@ -140,35 +139,53 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
     setShowModal(true);
   };
 
-  const dashboardData = useMemo(() => {
+  const dynamicDashboardData = useMemo(() => {
     const currentSerie = lame.filter(l => l.lama_stampo_serie === activeSerieId);
-    const types: Record<string, { items: LameStampo[], totalQta: number, totalLen: number, avgDiameter: string }> = {};
+    const groups: Record<string, { items: LameStampo[], totalQta: number, totalLen: number, avgDiameter: string }> = {};
     
-    ['LAME', 'GOMME'].forEach(t => {
-      types[t] = { items: [], totalQta: 0, totalLen: 0, avgDiameter: '--' };
-    });
-
     currentSerie.forEach(l => {
-      let tName = l.l_lame_stampi_tipi?.tipo_lama_stampo?.toUpperCase() || 'ALTRO';
-      if (!tName.includes('GOMMA')) tName = 'LAME'; else tName = 'GOMME';
+      const tName = l.l_lame_stampi_tipi?.tipo_lama_stampo?.toUpperCase() || 'ALTRO';
       
-      types[tName].items.push(l);
-      types[tName].totalQta += (l.lama_stampo_quantita || 0);
-      types[tName].totalLen += (l.lama_stampo_misura || 0) * (l.lama_stampo_quantita || 0);
+      if (!groups[tName]) {
+        groups[tName] = { items: [], totalQta: 0, totalLen: 0, avgDiameter: '--' };
+      }
       
-      if (types[tName].avgDiameter === '--' && l.lama_stampo_misura_attuale) {
-        types[tName].avgDiameter = l.lama_stampo_misura_attuale.toString().replace('.', ',');
+      groups[tName].items.push(l);
+      groups[tName].totalQta += (l.lama_stampo_quantita || 0);
+      groups[tName].totalLen += (l.lama_stampo_misura || 0) * (l.lama_stampo_quantita || 0);
+      
+      if (groups[tName].avgDiameter === '--' && l.lama_stampo_misura_attuale) {
+        groups[tName].avgDiameter = l.lama_stampo_misura_attuale.toString().replace('.', ',');
       }
     });
 
-    Object.keys(types).forEach(k => {
-      types[k].items.sort((a,b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
+    Object.keys(groups).forEach(k => {
+      groups[k].items.sort((a,b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
     });
 
-    return types;
+    return Object.keys(groups)
+      .sort((a, b) => {
+        if (a === 'LAME') return -1;
+        if (b === 'LAME') return 1;
+        if (a.includes('GOMMA')) return 1;
+        if (b.includes('GOMMA')) return -1;
+        return a.localeCompare(b);
+      })
+      .reduce((acc, key) => {
+        acc[key] = groups[key];
+        return acc;
+      }, {} as typeof groups);
   }, [lame, activeSerieId]);
 
   const activeSerieName = useMemo(() => serie.find(s => s.id_lama_stampo_serie === activeSerieId)?.lama_stampo_serie || 'SELEZIONA SERIE', [serie, activeSerieId]);
+
+  const getGroupColor = (name: string) => {
+    const upper = name.toUpperCase();
+    if (upper.includes('GOMMA')) return 'bg-[#ff0000] text-white';
+    if (upper.includes('BISELLAT')) return 'bg-indigo-600 text-white';
+    if (upper === 'LAME') return 'bg-[#94a3b8] text-slate-900';
+    return 'bg-blue-600 text-white';
+  };
 
   return (
     <div className="min-h-screen bg-[#cbd5e1] text-slate-900 pb-20 font-sans selection:bg-blue-200">
@@ -227,7 +244,7 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
 
       <div className="max-w-[1900px] mx-auto p-4 sm:p-6">
         
-        {/* Titolo Gigante Serie con Diametro */}
+        {/* Titolo Serie */}
         <div className="bg-white/70 backdrop-blur-md rounded-[2.5rem] border-b-[8px] border-black/10 p-10 mb-12 text-center shadow-2xl relative overflow-hidden group">
            <div className="absolute top-0 right-0 p-8 text-slate-800/5 group-hover:scale-110 transition-transform duration-1000">
               <LayoutGrid size={240} />
@@ -237,73 +254,59 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
              <h1 className="text-6xl md:text-8xl font-black uppercase italic tracking-tighter text-slate-800 drop-shadow-sm leading-none">
                {activeSerieName}
              </h1>
-             <div className="mt-6 flex justify-center items-center gap-6">
-                <div className="h-[2px] w-20 bg-slate-300"></div>
-                <div className="flex items-center gap-3">
-                   <span className="text-xl font-black text-blue-600 uppercase tracking-widest italic">DIAMETRO ATTUALE:</span>
-                   <span className="text-5xl font-black text-slate-900 tabular-nums italic">Ø {dashboardData['LAME'].avgDiameter}</span>
-                </div>
-                <div className="h-[2px] w-20 bg-slate-300"></div>
-             </div>
+             <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-[0.5em] italic">Configurazione Unità Slitter Nuovo</p>
            </div>
         </div>
 
-        <div className="space-y-12">
-           {['LAME', 'GOMME'].map(typeKey => {
-             const data = dashboardData[typeKey];
-             const isGomme = typeKey === 'GOMME';
-             const colorClass = isGomme ? 'bg-[#ff0000]' : 'bg-[#94a3b8]';
-             const textClass = isGomme ? 'text-white' : 'text-slate-900';
-
-             return (
-               <div key={typeKey} className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-16">
+           {Object.keys(dynamicDashboardData).length === 0 ? (
+             <div className="py-32 text-center bg-white/50 rounded-[3rem] border-4 border-dashed border-slate-300">
+               <p className="text-xl font-black text-slate-400 uppercase italic tracking-widest">Nessun componente registrato per questa serie nello Slitter Nuovo</p>
+             </div>
+           ) : (
+             Object.entries(dynamicDashboardData).map(([typeName, data]) => (
+               <div key={typeName} className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex-grow bg-white border-2 border-black/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-                     <div className={`${colorClass} ${textClass} py-6 px-12 text-center border-b-2 border-black/20 flex justify-between items-center`}>
-                        <h3 className="text-4xl font-black italic tracking-[0.3em] uppercase">{typeKey}</h3>
-                        {isGomme && <span className="text-xs font-black bg-white/20 px-4 py-1 rounded-full border border-white/20">Ø {data.avgDiameter}</span>}
+                     <div className={`${getGroupColor(typeName)} py-6 px-12 text-center border-b-2 border-black/20 flex justify-between items-center`}>
+                        <h3 className="text-4xl font-black italic tracking-[0.1em] uppercase">{typeName}</h3>
+                        <span className="text-xs font-black bg-white/20 px-4 py-1 rounded-full border border-white/20 uppercase tracking-widest">Ø ATTUALE: {data.avgDiameter}</span>
                      </div>
                      
                      <div className="p-6 bg-[#f1f5f9]">
-                        {data.items.length === 0 ? (
-                          <div className="py-24 text-center text-slate-400 font-black uppercase italic tracking-widest bg-white/50 rounded-3xl border-2 border-dashed border-slate-200">
-                             Nessun dato registrato per lo Slitter Nuovo
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
-                             {data.items.map(l => (
-                               <div 
-                                 key={l.id_lama_stampo} 
-                                 className="bg-white border-2 border-slate-300 rounded-[1.5rem] overflow-hidden hover:border-blue-500 transition-all group relative cursor-default shadow-sm"
-                               >
-                                  <div className="p-5 text-center flex flex-col items-center justify-center min-h-[120px]">
-                                     <p className="text-3xl font-black italic tabular-nums leading-none text-slate-900 mb-2">
-                                       {l.lama_stampo_misura?.toString().replace('.', ',')}
-                                     </p>
-                                     <div className="w-12 h-[2px] bg-slate-200 mb-2"></div>
-                                     <p className="text-sm font-black text-slate-500 tabular-nums tracking-widest">
-                                       {l.lama_stampo_quantita} <span className="text-[10px] opacity-40">PZ</span>
-                                     </p>
-                                  </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
+                           {data.items.map(l => (
+                             <div 
+                               key={l.id_lama_stampo} 
+                               className="bg-white border-2 border-slate-300 rounded-[1.5rem] overflow-hidden hover:border-blue-500 transition-all group relative cursor-default shadow-sm"
+                             >
+                                <div className="p-5 text-center flex flex-col items-center justify-center min-h-[120px]">
+                                   <p className="text-3xl font-black italic tabular-nums leading-none text-slate-900 mb-2">
+                                     {l.lama_stampo_misura?.toString().replace('.', ',')}
+                                   </p>
+                                   <div className="w-12 h-[2px] bg-slate-200 mb-2"></div>
+                                   <p className="text-sm font-black text-slate-500 tabular-nums tracking-widest">
+                                     {l.lama_stampo_quantita} <span className="text-[10px] opacity-40">PZ</span>
+                                   </p>
+                                </div>
 
-                                  {isOperator && (
-                                    <div className="absolute inset-0 bg-blue-600/95 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <div className="flex gap-2">
-                                          <button onClick={() => handleDuplicate(l)} className="p-3 bg-white text-blue-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Copy size={16}/></button>
-                                          <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-3 bg-white text-amber-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Pencil size={16}/></button>
-                                       </div>
-                                       <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-3 bg-white text-rose-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Trash2 size={16}/></button>
-                                    </div>
-                                  )}
-                               </div>
-                             ))}
-                          </div>
-                        )}
+                                {isOperator && (
+                                  <div className="absolute inset-0 bg-blue-600/95 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                     <div className="flex gap-2">
+                                        <button onClick={() => handleDuplicate(l)} className="p-3 bg-white text-blue-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Copy size={16}/></button>
+                                        <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-3 bg-white text-amber-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Pencil size={16}/></button>
+                                     </div>
+                                     <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-3 bg-white text-rose-600 rounded-xl shadow-lg active:scale-90 transition-transform"><Trash2 size={16}/></button>
+                                  </div>
+                                )}
+                             </div>
+                           ))}
+                        </div>
                      </div>
                   </div>
 
                   <div className="lg:w-80 shrink-0 flex flex-col gap-6">
                      <div className="bg-[#1e293b] rounded-[2rem] p-8 border-l-[14px] border-blue-500 shadow-xl flex flex-col justify-center min-h-[160px]">
-                        <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-1 italic">TOTALE {typeKey}</p>
+                        <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-1 italic">TOTALE {typeName}</p>
                         <p className="text-7xl font-black text-white italic tabular-nums leading-none">
                           {data.totalQta}
                         </p>
@@ -313,12 +316,12 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
                         <p className="text-5xl font-black text-white italic tabular-nums leading-none">
                           {(data.totalLen / 1000).toFixed(3).replace('.', ',')}
                         </p>
-                        <p className="text-[9px] font-bold text-white/20 uppercase mt-4 leading-tight tracking-[0.2em]">Calcolato su Largh. Nominale</p>
+                        <p className="text-[9px] font-bold text-white/20 uppercase mt-4 leading-tight tracking-[0.2em]">Sviluppo su {typeName}</p>
                      </div>
                   </div>
                </div>
-             );
-           })}
+             ))
+           )}
         </div>
       </div>
 
@@ -432,7 +435,7 @@ const SlitterNuovoLame: React.FC<Props> = ({ profile }) => {
       )}
 
       {loading && !showModal && !showNewSerieModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
+        <div className="fixed inset-0 bg-[#0a0f1a]/60 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
            <RefreshCw size={60} className="text-blue-500 animate-spin mb-4" />
            <p className="text-xs font-black uppercase tracking-[0.5em] text-white animate-pulse italic">Aggiornamento Dashboard...</p>
         </div>
