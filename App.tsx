@@ -13,6 +13,7 @@ import UfficioStats from './pages/UfficioStats';
 import Utilita from './pages/Utilita';
 import SlitterPiccolo from './pages/SlitterPiccolo';
 import SlitterLame from './pages/SlitterLame';
+import SlitterNuovoLame from './pages/SlitterNuovoLame';
 import Personale from './pages/Personale';
 import Login from './pages/Login';
 import Header from './components/Header';
@@ -125,6 +126,12 @@ const App: React.FC = () => {
           <Route path="/lavoro/slitter-piccolo/lame" element={
             <ProtectedRoute session={session} section="LAVORO" subsection="SLITTER_LAME" profile={profile}>
               <SlitterLame profile={profile} />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/lavoro/slitter-nuovo/lame" element={
+            <ProtectedRoute session={session} section="LAVORO" subsection="SLITTER_LAME" profile={profile}>
+              <SlitterNuovoLame profile={profile} />
             </ProtectedRoute>
           } />
 

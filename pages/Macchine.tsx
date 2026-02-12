@@ -31,7 +31,14 @@ const MACHINE_CONFIG: Record<string, { color: string; icon: any; tools: { label:
   'SBAVATRICE NUOVA': { color: 'border-amber-500', icon: Hammer, tools: [{ label: 'ATTREZZI', icon: Settings, link: '#' }, { label: 'MANUTENZIONE', icon: Wrench, link: '#' }] },
   'SBAVATRICE VECCHIA': { color: 'border-amber-700', icon: Hammer, tools: [{ label: 'ATTREZZI', icon: Settings, link: '#' }, { label: 'MANUTENZIONE', icon: Wrench, link: '#' }] },
   'SLITTER GRANDE': { color: 'border-indigo-700', icon: Scissors, tools: [{ label: 'MANUTENZIONE', icon: Wrench, link: '#' }, { label: 'STATISTICHE', icon: BarChart3, link: '#' }] },
-  'SLITTER NUOVO': { color: 'border-indigo-500', icon: Scissors, tools: [{ label: 'LAME', icon: Scissors, link: '#' }, { label: 'MANUTENZIONE', icon: Wrench, link: '#' }] },
+  'SLITTER NUOVO': { 
+    color: 'border-indigo-500', 
+    icon: Scissors, 
+    tools: [
+      { label: 'LAME', icon: Scissors, link: '/lavoro/slitter-nuovo/lame' }, 
+      { label: 'MANUTENZIONE', icon: Wrench, link: '#' }
+    ] 
+  },
   'SLITTER PICCOLO': { 
     color: 'border-indigo-400', 
     icon: Scissors, 
@@ -188,7 +195,11 @@ const Macchine: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3 mb-10 relative z-10">
                    {config.tools.map((tool, tIdx) => (
-                     <Link key={tIdx} to={tool.link} className="bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-blue-500/30 hover:bg-white/10 transition-all flex items-center gap-3 group/btn">
+                     <Link key={tIdx} 
+                        to={tool.link} 
+                        onClick={() => { if(tool.link !== '#') localStorage.setItem('kme_selected_macchina', m.id_macchina); }}
+                        className="bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-blue-500/30 hover:bg-white/10 transition-all flex items-center gap-3 group/btn"
+                     >
                         <tool.icon size={14} className="text-white/40 group-hover/btn:text-blue-400" />
                         <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">{tool.label}</span>
                      </Link>
