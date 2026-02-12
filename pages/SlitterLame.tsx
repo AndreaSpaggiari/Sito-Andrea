@@ -8,7 +8,7 @@ import {
 } from '../types';
 import { 
   ArrowLeft, Plus, X, Pencil, Trash2, 
-  RefreshCw, Save, Copy, LayoutGrid, Calculator, ChevronDown
+  RefreshCw, Save, Copy, LayoutGrid, Calculator, ChevronDown, FolderPlus
 } from 'lucide-react';
 
 interface Props {
@@ -23,8 +23,13 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSerieId, setActiveSerieId] = useState<number | null>(null);
+  
+  // Modali
   const [showModal, setShowModal] = useState(false);
+  const [showNewSerieModal, setShowNewSerieModal] = useState(false);
+  
   const [editingLama, setEditingLama] = useState<LameStampo | null>(null);
+  const [newSerieName, setNewSerieName] = useState('');
   
   const currentMachineId = useMemo(() => localStorage.getItem('kme_selected_macchina') || 'SLP', []);
   const isOperator = profile?.role === 'ADMIN' || accessLevel === 'OPERATORE';
@@ -76,6 +81,29 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
 
   useEffect(() => { fetchAccess(); fetchData(); }, [fetchAccess, fetchData]);
 
+  const handleCreateSerie = async () => {
+    if (!newSerieName.trim() || !isOperator) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('l_lame_stampi_serie')
+        .insert([{ lama_stampo_serie: newSerieName.trim().toUpperCase() }])
+        .select();
+      
+      if (error) throw error;
+      if (data && data[0]) {
+        setActiveSerieId(data[0].id_lama_stampo_serie);
+        setNewSerieName('');
+        setShowNewSerieModal(false);
+        fetchData();
+      }
+    } catch (err: any) {
+      alert("Errore creazione serie: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     if (!isOperator) return;
     e.preventDefault();
@@ -83,7 +111,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
     try {
       const payload = {
         lama_stampo_tipo: formData.lama_stampo_tipo,
-        lama_stampo_serie: activeSerieId, // Use active serie
+        lama_stampo_serie: activeSerieId,
         id_macchina: currentMachineId,
         lama_stampo_misura: formData.lama_stampo_misura,
         lama_stampo_misura_attuale: formData.lama_stampo_misura_attuale || formData.lama_stampo_misura,
@@ -129,7 +157,6 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       types[tName].totalQta += (l.lama_stampo_quantita || 0);
       types[tName].totalLen += (l.lama_stampo_misura || 0) * (l.lama_stampo_quantita || 0);
       
-      // Update global diameter if it's the first item found
       if (types[tName].avgDiameter === '--' && l.lama_stampo_misura_attuale) {
         types[tName].avgDiameter = l.lama_stampo_misura_attuale.toString().replace('.', ',');
       }
@@ -155,16 +182,27 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
             </Link>
             <div className="h-6 w-[1px] bg-white/10"></div>
             
-            {/* New Series Selector in Top Bar */}
-            <div className="relative group">
-              <select 
-                value={activeSerieId || ''} 
-                onChange={(e) => setActiveSerieId(Number(e.target.value))}
-                className="bg-transparent text-blue-400 font-black uppercase tracking-widest text-sm outline-none cursor-pointer appearance-none pr-8 hover:text-blue-300 transition-colors"
-              >
-                {serie.map(s => <option key={s.id_lama_stampo_serie} value={s.id_lama_stampo_serie} className="bg-slate-800 text-white">{s.lama_stampo_serie}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" />
+            {/* Series Selector and ADD NEW button */}
+            <div className="flex items-center gap-2">
+              <div className="relative group">
+                <select 
+                  value={activeSerieId || ''} 
+                  onChange={(e) => setActiveSerieId(Number(e.target.value))}
+                  className="bg-transparent text-blue-400 font-black uppercase tracking-widest text-sm outline-none cursor-pointer appearance-none pr-8 hover:text-blue-300 transition-colors"
+                >
+                  {serie.map(s => <option key={s.id_lama_stampo_serie} value={s.id_lama_stampo_serie} className="bg-slate-800 text-white">{s.lama_stampo_serie}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" />
+              </div>
+              {isOperator && (
+                <button 
+                  onClick={() => setShowNewSerieModal(true)}
+                  className="p-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-lg transition-all border border-blue-600/20"
+                  title="Crea Nuova Serie"
+                >
+                  <Plus size={14} />
+                </button>
+              )}
             </div>
          </div>
          
@@ -187,7 +225,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
 
       <div className="max-w-[1900px] mx-auto p-4 sm:p-6">
         
-        {/* Titolo Gigante Serie con Diametro (Stile Excel) */}
+        {/* Titolo Gigante Serie con Diametro */}
         <div className="bg-white/70 backdrop-blur-md rounded-[2.5rem] border-b-[8px] border-black/10 p-10 mb-12 text-center shadow-2xl relative overflow-hidden group">
            <div className="absolute top-0 right-0 p-8 text-slate-800/5 group-hover:scale-110 transition-transform duration-1000">
               <LayoutGrid size={240} />
@@ -217,8 +255,6 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
 
              return (
                <div key={typeKey} className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  
-                  {/* Blocco Griglia */}
                   <div className="flex-grow bg-white border-2 border-black/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
                      <div className={`${colorClass} ${textClass} py-6 px-12 text-center border-b-2 border-black/20 flex justify-between items-center`}>
                         <h3 className="text-4xl font-black italic tracking-[0.3em] uppercase">{typeKey}</h3>
@@ -237,20 +273,16 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
                                  key={l.id_lama_stampo} 
                                  className="bg-white border-2 border-slate-300 rounded-[1.5rem] overflow-hidden hover:border-blue-500 transition-all group relative cursor-default shadow-sm"
                                >
-                                  {/* Item Cell: Misura SOPRA (Grande) e Quantità SOTTO */}
                                   <div className="p-5 text-center flex flex-col items-center justify-center min-h-[120px]">
-                                     {/* Misura Nominale - In grassetto sopra */}
                                      <p className="text-3xl font-black italic tabular-nums leading-none text-slate-900 mb-2">
                                        {l.lama_stampo_misura?.toString().replace('.', ',')}
                                      </p>
                                      <div className="w-12 h-[2px] bg-slate-200 mb-2"></div>
-                                     {/* Quantità - Sotto */}
                                      <p className="text-sm font-black text-slate-500 tabular-nums tracking-widest">
                                        {l.lama_stampo_quantita} <span className="text-[10px] opacity-40">PZ</span>
                                      </p>
                                   </div>
 
-                                  {/* Azioni Rapide Hover */}
                                   {isOperator && (
                                     <div className="absolute inset-0 bg-blue-600/95 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                                        <div className="flex gap-2">
@@ -267,7 +299,6 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
                      </div>
                   </div>
 
-                  {/* Sidebar Totali */}
                   <div className="lg:w-80 shrink-0 flex flex-col gap-6">
                      <div className="bg-[#1e293b] rounded-[2rem] p-8 border-l-[14px] border-blue-500 shadow-xl flex flex-col justify-center min-h-[160px]">
                         <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest mb-1 italic">TOTALE {typeKey}</p>
@@ -283,14 +314,48 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
                         <p className="text-[9px] font-bold text-white/20 uppercase mt-4 leading-tight tracking-[0.2em]">Calcolato su Largh. Nominale</p>
                      </div>
                   </div>
-
                </div>
              );
            })}
         </div>
       </div>
 
-      {/* Modale Tecnico */}
+      {/* Modale Nuova Serie */}
+      {showNewSerieModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-in zoom-in duration-200">
+           <div className="bg-white rounded-[3rem] w-full max-w-sm shadow-2xl overflow-hidden border-2 border-white/20">
+              <div className="bg-[#1e293b] p-8 text-white flex justify-between items-center">
+                 <div className="flex items-center gap-4">
+                    <FolderPlus size={24} className="text-blue-400" />
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter">Nuova Serie</h3>
+                 </div>
+                 <button onClick={() => setShowNewSerieModal(false)} className="p-2 hover:bg-white/10 rounded-xl"><X size={20}/></button>
+              </div>
+              <div className="p-8 space-y-6 bg-[#f8fafc]">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Nome Identificativo Serie</label>
+                    <input 
+                      type="text"
+                      autoFocus
+                      placeholder="Es: SN SERIE 3"
+                      value={newSerieName}
+                      onChange={e => setNewSerieName(e.target.value)}
+                      className="w-full p-5 bg-white border-2 border-slate-200 focus:border-blue-500 rounded-2xl font-black uppercase italic outline-none transition-all shadow-sm"
+                    />
+                 </div>
+                 <button 
+                   onClick={handleCreateSerie}
+                   disabled={loading || !newSerieName.trim()}
+                   className="w-full py-5 bg-blue-600 text-white font-black rounded-2xl uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border-b-4 border-blue-800 disabled:opacity-50"
+                 >
+                    <Save size={18} /> CREA CATEGORIA
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modale Tecnico Pezzo */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-in zoom-in duration-200">
            <div className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden border-2 border-white/20">
@@ -364,9 +429,9 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
         </div>
       )}
 
-      {loading && !showModal && (
+      {loading && !showModal && !showNewSerieModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
-           <RefreshCw size={60} className="text-blue-500 animate-spin mb-6" />
+           <RefreshCw size={60} className="text-blue-500 animate-spin mb-4" />
            <p className="text-xs font-black uppercase tracking-[0.5em] text-white animate-pulse italic">Aggiornamento Dashboard...</p>
         </div>
       )}
