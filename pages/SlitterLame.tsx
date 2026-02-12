@@ -218,12 +218,16 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
                                      </span>
                                   </div>
                                   
-                                  {/* Corpo Cella (Quantità e Misura Nominale) */}
+                                  {/* Corpo Cella (Misura SOPRA e Quantità SOTTO) */}
                                   <div className="p-3 text-center flex flex-col items-center">
-                                     <p className="text-2xl font-black italic tabular-nums leading-none mb-1 text-slate-900">{l.lama_stampo_quantita}</p>
-                                     <div className="w-full h-[1px] bg-slate-200 my-1"></div>
-                                     <p className="text-[11px] font-bold text-slate-500 tabular-nums">
+                                     {/* Misura Nominale - In grassetto sopra */}
+                                     <p className="text-2xl font-black italic tabular-nums leading-none mb-1 text-slate-900">
                                        {l.lama_stampo_misura?.toString().replace('.', ',')}
+                                     </p>
+                                     <div className="w-full h-[1px] bg-slate-200 my-1"></div>
+                                     {/* Quantità - Sotto */}
+                                     <p className="text-sm font-bold text-slate-500 tabular-nums">
+                                       {l.lama_stampo_quantita} <span className="text-[9px] opacity-40">PZ</span>
                                      </p>
                                   </div>
 
