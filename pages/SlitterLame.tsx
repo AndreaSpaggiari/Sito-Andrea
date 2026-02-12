@@ -9,7 +9,7 @@ import {
 import { 
   ArrowLeft, Scissors, Plus, X, Pencil, Trash2, 
   RefreshCw, Search, Save, Settings2,
-  ChevronRight, Copy, History, AlertCircle, Layers, Eye, Ruler
+  ChevronRight, Copy, History, AlertCircle, Layers, Eye, Ruler, LayoutGrid, Calculator
 } from 'lucide-react';
 
 interface Props {
@@ -23,7 +23,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
   const [serie, setSerie] = useState<LameStampoSerie[]>([]);
   const [macchine, setMacchine] = useState<Macchina[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeSerieId, setActiveSerieId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingLama, setEditingLama] = useState<LameStampo | null>(null);
   
@@ -43,13 +43,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       setAccessLevel('OPERATORE');
       return;
     }
-    const { data } = await supabase
-      .from('l_permessi')
-      .select('livello')
-      .eq('user_id', profile?.id)
-      .eq('sezione', 'LAVORO')
-      .eq('sottosezione', 'SLITTER_LAME')
-      .maybeSingle();
+    const { data } = await supabase.from('l_permessi').select('livello').eq('user_id', profile?.id).eq('sezione', 'LAVORO').eq('sottosezione', 'SLITTER_LAME').maybeSingle();
     if (data) setAccessLevel(data.livello as AccessLevel);
   }, [profile]);
 
@@ -64,29 +58,25 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       ]);
 
       if (tRes.data) setTipi(tRes.data as LameStampoTipo[]);
-      if (sRes.data) setSerie(sRes.data as LameStampoSerie[]);
+      if (sRes.data) {
+        const sData = sRes.data as LameStampoSerie[];
+        setSerie(sData);
+        if (!activeSerieId && sData.length > 0) setActiveSerieId(sData[0].id_lama_stampo_serie);
+      }
       if (mRes.data) setMacchine(mRes.data as Macchina[]);
       if (lRes.data) setLame(lRes.data as LameStampo[]);
     } catch (err) {
-      console.error("Errore fetch database:", err);
+      console.error("Errore fetch:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeSerieId]);
 
-  useEffect(() => {
-    fetchAccess();
-    fetchData();
-  }, [fetchAccess, fetchData]);
+  useEffect(() => { fetchAccess(); fetchData(); }, [fetchAccess, fetchData]);
 
   const handleSave = async (e: React.FormEvent) => {
     if (!isOperator) return;
     e.preventDefault();
-    if (!formData.lama_stampo_tipo || formData.lama_stampo_tipo === 0) {
-      alert("Seleziona un tipo di lama/stampo");
-      return;
-    }
-
     setLoading(true);
     try {
       const payload = {
@@ -99,393 +89,275 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       };
 
       if (editingLama) {
-        const { error } = await supabase
-          .from('l_lame_stampi')
-          .update(payload)
-          .eq('id_lama_stampo', editingLama.id_lama_stampo);
-        if (error) throw error;
+        await supabase.from('l_lame_stampi').update(payload).eq('id_lama_stampo', editingLama.id_lama_stampo);
       } else {
-        const { error } = await supabase
-          .from('l_lame_stampi')
-          .insert([payload]);
-        if (error) throw error;
+        await supabase.from('l_lame_stampi').insert([payload]);
       }
       setShowModal(false);
       fetchData();
-    } catch (err: any) {
-      alert("Errore salvataggio: " + err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { alert(err.message); } finally { setLoading(false); }
   };
 
   const handleDelete = async (id: number) => {
-    if (!isOperator || !confirm("Sei sicuro di voler eliminare questo elemento?")) return;
+    if (!isOperator || !confirm("Eliminare definitivamente?")) return;
     setLoading(true);
-    const { error } = await supabase.from('l_lame_stampi').delete().eq('id_lama_stampo', id);
-    if (!error) fetchData();
-    else alert(error.message);
-    setLoading(false);
+    await supabase.from('l_lame_stampi').delete().eq('id_lama_stampo', id);
+    fetchData();
   };
 
-  const handleDuplicate = (lama: LameStampo) => {
-    if (!isOperator) return;
+  const handleDuplicate = (l: LameStampo) => {
     setEditingLama(null);
-    setFormData({
-      lama_stampo_tipo: lama.lama_stampo_tipo,
-      lama_stampo_serie: lama.lama_stampo_serie,
-      id_macchina: lama.id_macchina,
-      lama_stampo_misura: lama.lama_stampo_misura,
-      lama_stampo_misura_attuale: lama.lama_stampo_misura_attuale,
-      lama_stampo_quantita: lama.lama_stampo_quantita
-    });
+    setFormData({ ...l, id_lama_stampo: undefined });
     setShowModal(true);
   };
 
-  const groupedData = useMemo(() => {
-    const filtered = lame.filter(l => {
-      const search = searchTerm.toLowerCase();
-      const type = l.l_lame_stampi_tipi?.tipo_lama_stampo || '';
-      const s = l.l_lame_stampi_serie?.lama_stampo_serie || '';
-      return type.toLowerCase().includes(search) || s.toLowerCase().includes(search);
-    });
-
-    const groups: Record<string, { series: Record<string, Record<string, LameStampo[]>>, standalone: LameStampo[] }> = {};
+  // Logica di Raggruppamento Dashboard
+  const dashboardData = useMemo(() => {
+    const currentSerie = lame.filter(l => l.lama_stampo_serie === activeSerieId);
     
-    filtered.forEach(l => {
-      const typeName = l.l_lame_stampi_tipi?.tipo_lama_stampo || 'ALTRO';
-      if (!groups[typeName]) groups[typeName] = { series: {}, standalone: [] };
+    const types: Record<string, { diametri: Record<string, LameStampo[]>, totalQta: number, totalLen: number }> = {};
+    
+    // Inizializziamo sempre LAME e GOMME per mantenere la UI stabile
+    ['LAME', 'GOMME'].forEach(t => {
+      types[t] = { diametri: {}, totalQta: 0, totalLen: 0 };
+    });
+
+    currentSerie.forEach(l => {
+      let tName = l.l_lame_stampi_tipi?.tipo_lama_stampo?.toUpperCase() || 'ALTRO';
+      if (!tName.includes('GOMMA')) tName = 'LAME'; else tName = 'GOMME';
       
-      if (l.l_lame_stampi_serie?.lama_stampo_serie) {
-        const sName = l.l_lame_stampi_serie.lama_stampo_serie;
-        const diameter = (l.lama_stampo_misura_attuale || l.lama_stampo_misura || 0).toString();
-        
-        if (!groups[typeName].series[sName]) groups[typeName].series[sName] = {};
-        if (!groups[typeName].series[sName][diameter]) groups[typeName].series[sName][diameter] = [];
-        
-        groups[typeName].series[sName][diameter].push(l);
-      } else {
-        groups[typeName].standalone.push(l);
-      }
+      if (!types[tName]) types[tName] = { diametri: {}, totalQta: 0, totalLen: 0 };
+      
+      const diam = (l.lama_stampo_misura_attuale || 0).toString().replace('.', ',');
+      if (!types[tName].diametri[diam]) types[tName].diametri[diam] = [];
+      
+      types[tName].diametri[diam].push(l);
+      types[tName].totalQta += (l.lama_stampo_quantita || 0);
+      types[tName].totalLen += (l.lama_stampo_misura || 0) * (l.lama_stampo_quantita || 0);
     });
 
-    // Ordinamento dei sottomultipli per diametro (decrescente)
-    Object.keys(groups).forEach(tk => {
-      groups[tk].standalone.sort((a, b) => (b.lama_stampo_misura_attuale || 0) - (a.lama_stampo_misura_attuale || 0));
-    });
+    return types;
+  }, [lame, activeSerieId]);
 
-    return groups;
-  }, [lame, searchTerm]);
+  const activeSerieName = useMemo(() => serie.find(s => s.id_lama_stampo_serie === activeSerieId)?.lama_stampo_serie || 'SELEZIONA SERIE', [serie, activeSerieId]);
 
   return (
-    <div className="min-h-screen bg-[#060a14] text-slate-100 pb-20">
+    <div className="min-h-screen bg-[#c8d1d8] text-slate-900 pb-32 font-sans selection:bg-blue-200">
       
-      {!isOperator && (
-        <div className="bg-amber-600 p-2 text-center text-slate-950 font-black text-[9px] uppercase tracking-[0.4em] flex items-center justify-center gap-4">
-           <Eye size={12} /> MODALITÀ SOLA LETTURA - FUNZIONI DI MODIFICA DISABILITATE <Eye size={12} />
-        </div>
-      )}
-
-      <div className="relative pt-12 pb-24 px-6 overflow-hidden border-b border-white/5 bg-slate-900/40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_-20%,_rgba(99,102,241,0.15),_transparent_50%)]"></div>
-        <div className="relative z-10 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-end gap-6">
-          <div>
-            <div className="flex items-center gap-4 mb-6">
-              <Link to="/lavoro/slitter-piccolo" className="p-3 bg-white/5 rounded-2xl text-white/40 hover:text-white transition-all border border-white/5 hover:bg-white/10 shadow-xl">
-                <ArrowLeft size={18} />
-              </Link>
-              <div className="flex flex-col">
-                <span className="text-indigo-400 font-black text-[9px] uppercase tracking-[0.4em] leading-none mb-1">INVENTORY MANAGEMENT</span>
-                <h1 className="text-4xl font-black uppercase tracking-tighter italic leading-none text-white">LAME <span className="text-indigo-500">& STAMPI</span></h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-               <div className="relative flex-1 md:w-80">
-                  <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input 
-                    type="text" 
-                    placeholder="Cerca per tipo o serie..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all text-white" 
-                  />
-               </div>
-               <button onClick={fetchData} className="p-3 bg-white/5 text-slate-400 hover:text-indigo-400 rounded-2xl border border-white/10 transition-all">
-                  <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-               </button>
-            </div>
-          </div>
-
-          {isOperator && (
-            <button 
-              onClick={() => { 
-                setEditingLama(null); 
-                setFormData({ 
-                  lama_stampo_tipo: tipi[0]?.id_tipo_lama_stampo || 0, 
-                  id_macchina: 'SLP', 
-                  lama_stampo_misura: 0, 
-                  lama_stampo_misura_attuale: 0,
-                  lama_stampo_quantita: 1 
-                }); 
-                setShowModal(true); 
-              }}
-              className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest flex items-center gap-3 shadow-2xl active:scale-95 transition-all"
-            >
-              <Plus size={18} /> Nuova Registrazione
-            </button>
-          )}
-        </div>
+      {/* Top Banner Control */}
+      <div className="bg-[#1e293b] p-4 flex justify-between items-center border-b-2 border-black/20">
+         <div className="flex items-center gap-6">
+            <Link to="/lavoro/slitter-piccolo" className="flex items-center gap-2 text-white/60 hover:text-white transition-colors">
+               <ArrowLeft size={20} /> <span className="text-xs font-bold uppercase tracking-widest">Indietro</span>
+            </Link>
+            <h2 className="text-white font-black italic uppercase tracking-tighter text-lg">Registro Affilatura & Stampi</h2>
+         </div>
+         <div className="flex gap-3">
+            {isOperator && (
+              <button 
+                onClick={() => { setEditingLama(null); setFormData({ lama_stampo_tipo: tipi[0]?.id_tipo_lama_stampo, lama_stampo_serie: activeSerieId, id_macchina: 'SLP', lama_stampo_misura: 0, lama_stampo_misura_attuale: 0, lama_stampo_quantita: 1 }); setShowModal(true); }}
+                className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95"
+              >
+                + Inserimento Rapido
+              </button>
+            )}
+            <button onClick={fetchData} className="p-2 bg-white/10 text-white rounded-lg"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
+         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-6 -mt-10 relative z-20">
-        <div className="space-y-12">
-           {Object.keys(groupedData).length === 0 ? (
-             <div className="py-40 text-center bg-white/[0.02] rounded-[3rem] border border-dashed border-white/10">
-                <Scissors size={60} className="mx-auto mb-6 opacity-10" />
-                <p className="text-xs font-black uppercase tracking-[0.4em] italic text-slate-600">Nessuna referenza trovata</p>
-             </div>
-           ) : Object.entries(groupedData).map(([typeName, group]) => (
-             <div key={typeName} className="bg-white/[0.02] border border-white/5 rounded-[3rem] overflow-hidden shadow-2xl">
-                <div className="px-10 py-6 border-b border-white/5 bg-indigo-600/5 flex justify-between items-center">
-                   <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
-                         <Scissors size={20} />
-                      </div>
-                      <h3 className="text-xl font-black text-white uppercase italic tracking-tighter">{typeName}</h3>
-                   </div>
-                   <span className="bg-indigo-600/20 text-indigo-400 px-4 py-1 rounded-full text-[9px] font-black border border-indigo-500/20">
-                     Sincronizzato
-                   </span>
-                </div>
-                
-                <div className="p-4 sm:p-8">
-                   {/* Rendering SERIE con sottogruppi diametro */}
-                   {Object.entries(group.series).map(([sName, diameterGroups]) => (
-                     <div key={sName} className="mb-10 last:mb-0 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <div className="px-8 py-5 bg-white/[0.03] border-l-4 border-indigo-500 flex justify-between items-center rounded-r-2xl mb-6 shadow-sm">
-                           <div className="flex items-center gap-4">
-                              <Layers size={18} className="text-indigo-400" />
-                              <h4 className="text-lg font-black text-white uppercase italic tracking-tighter">SERIE: {sName}</h4>
-                           </div>
-                           <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Multiple Diameters Check</span>
-                        </div>
-                        
-                        <div className="space-y-8 pl-4 border-l border-white/5 ml-4">
-                           {Object.entries(diameterGroups).sort((a,b) => parseFloat(b[0]) - parseFloat(a[0])).map(([diameter, items]) => (
-                             <div key={diameter} className="bg-white/[0.01] rounded-2xl p-4 sm:p-6 border border-white/5">
-                                <div className="flex items-center justify-between mb-4 px-2">
-                                   <div className="flex items-center gap-3">
-                                      <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
-                                         <Ruler size={14} />
-                                      </div>
-                                      <div>
-                                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1">Diametro Rilevato</p>
-                                         <p className="text-lg font-black text-white italic tabular-nums">{diameter} <span className="text-[10px] not-italic opacity-40">mm</span></p>
-                                      </div>
-                                   </div>
-                                   <span className="bg-slate-800 px-3 py-1 rounded-full text-[8px] font-bold text-slate-400 uppercase">{items.length} Pezzi in Stock</span>
-                                </div>
+      <div className="max-w-[1900px] mx-auto p-4 sm:p-8">
+        
+        {/* Titolo Gigante Serie (Come da Foto) */}
+        <div className="bg-white/40 backdrop-blur-md rounded-xl border-b-4 border-black/10 p-6 mb-10 text-center shadow-xl">
+           <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter text-slate-800 drop-shadow-sm">
+             {activeSerieName}
+           </h1>
+        </div>
 
-                                <div className="overflow-x-auto">
-                                   <table className="w-full text-left">
-                                      <thead>
-                                         <tr className="text-[8px] font-black text-slate-600 uppercase tracking-widest border-b border-white/5">
-                                            <th className="px-4 py-3">Variante (Misura Nominale)</th>
-                                            <th className="px-4 py-3 text-center">Quantità Tot.</th>
-                                            <th className="px-4 py-3 text-right">Strumenti</th>
-                                         </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-white/[0.02]">
-                                         {items.map(l => (
-                                           <tr key={l.id_lama_stampo} className="group hover:bg-white/[0.02] transition-colors">
-                                              <td className="px-4 py-4">
-                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-base font-black text-white italic tabular-nums">{l.lama_stampo_misura || '--'} <span className="text-[10px] opacity-40 not-italic">mm</span></span>
-                                                    <span className="text-[8px] font-bold text-slate-700 uppercase px-2 py-0.5 bg-white/5 rounded">ID {l.id_lama_stampo}</span>
-                                                 </div>
-                                              </td>
-                                              <td className="px-4 py-4 text-center">
-                                                 <span className="inline-flex items-center gap-1 bg-amber-600/10 text-amber-500 px-3 py-1 rounded-xl border border-amber-500/20 font-black italic tabular-nums">
-                                                    {l.lama_stampo_quantita || 1} <span className="text-[8px] opacity-60 not-italic">PZ</span>
-                                                 </span>
-                                              </td>
-                                              <td className="px-4 py-4 text-right">
-                                                 <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                                    {isOperator ? (
-                                                      <>
-                                                        <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5" title="Clona"><Copy size={12} /></button>
-                                                        <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5" title="Modifica"><Pencil size={12} /></button>
-                                                        <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5" title="Elimina"><Trash2 size={12} /></button>
-                                                      </>
-                                                    ) : (
-                                                      <Eye size={12} className="text-slate-600" />
-                                                    )}
-                                                 </div>
-                                              </td>
-                                           </tr>
-                                         ))}
-                                      </tbody>
-                                   </table>
+        <div className="space-y-16">
+           {['LAME', 'GOMME'].map(typeKey => {
+             const data = dashboardData[typeKey];
+             const isGomme = typeKey === 'GOMME';
+             const colorClass = isGomme ? 'bg-[#ff0000]' : 'bg-[#a3aab1]';
+             const textClass = isGomme ? 'text-white' : 'text-slate-900';
+             const borderClass = isGomme ? 'border-red-800' : 'border-slate-400';
+
+             return (
+               <div key={typeKey} className="relative flex flex-col lg:flex-row gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  
+                  {/* Blocco Principale Griglia */}
+                  <div className="flex-grow bg-white border-2 border-black/10 rounded-xl overflow-hidden shadow-2xl">
+                     <div className={`${colorClass} ${textClass} py-3 px-8 text-center border-b-2 border-black/20`}>
+                        <h3 className="text-3xl font-black italic tracking-[0.2em]">{typeKey}</h3>
+                     </div>
+                     
+                     <div className="overflow-x-auto">
+                        <div className="flex min-w-max">
+                           {Object.entries(data.diametri).length === 0 ? (
+                             <div className="p-20 w-full text-center text-slate-300 font-black uppercase italic tracking-widest">Nessun dato registrato</div>
+                           ) : Object.entries(data.diametri).sort((a,b) => parseFloat(a[0].replace(',','.')) - parseFloat(b[0].replace(',','.'))).map(([diam, items]) => (
+                             <div key={diam} className="border-r-2 border-black/5 last:border-0">
+                                {/* Intestazione Diametro */}
+                                <div className="bg-[#e2e8f0] p-4 text-center border-b-2 border-black/10 min-w-[140px]">
+                                   <span className="text-2xl font-black italic tabular-nums">{diam}</span>
+                                </div>
+                                
+                                {/* Celle Contenuto */}
+                                <div className="divide-y divide-black/5">
+                                   {items.map(l => (
+                                     <div key={l.id_lama_stampo} className="p-4 hover:bg-blue-50 transition-colors group relative">
+                                        <div className="text-center">
+                                           <p className="text-xl font-black italic mb-1">{l.lama_stampo_quantita}</p>
+                                           <p className="text-sm font-bold text-slate-500 border-t border-black/10 pt-1">{l.lama_stampo_misura}</p>
+                                        </div>
+                                        
+                                        {/* Overlay Azioni al passaggio */}
+                                        {isOperator && (
+                                          <div className="absolute inset-0 bg-blue-600/90 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             <button onClick={() => handleDuplicate(l)} className="p-2 bg-white text-blue-600 rounded-lg shadow-lg"><Copy size={14}/></button>
+                                             <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white text-amber-600 rounded-lg shadow-lg"><Pencil size={14}/></button>
+                                             <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white text-rose-600 rounded-lg shadow-lg"><Trash2 size={14}/></button>
+                                          </div>
+                                        )}
+                                     </div>
+                                   ))}
                                 </div>
                              </div>
                            ))}
                         </div>
                      </div>
-                   ))}
+                  </div>
 
-                   {/* Rendering STANDALONE (Senza Serie) */}
-                   {group.standalone.length > 0 && (
-                     <div className="mt-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="px-8 py-3 border-b border-white/5 mb-6 flex items-center gap-4">
-                           <div className="w-1.5 h-1.5 bg-slate-500 rounded-full"></div>
-                           <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Elementi Singoli / Stampi Fuori Serie</h4>
-                        </div>
-                        <div className="overflow-x-auto px-6 pb-4">
-                           <table className="w-full text-left">
-                              <thead>
-                                 <tr className="text-[8px] font-black text-slate-600 uppercase tracking-widest border-b border-white/5">
-                                    <th className="px-4 py-3">Identificativo</th>
-                                    <th className="px-4 py-3 text-center">M. Nominale</th>
-                                    <th className="px-4 py-3 text-center">M. Attuale</th>
-                                    <th className="px-4 py-3 text-center">Quantità</th>
-                                    <th className="px-4 py-3 text-right">Azioni</th>
-                                 </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/[0.02]">
-                                 {group.standalone.map(l => (
-                                   <tr key={l.id_lama_stampo} className="group hover:bg-white/[0.02] transition-colors">
-                                      <td className="px-4 py-4">
-                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ID: {l.id_lama_stampo}</span>
-                                      </td>
-                                      <td className="px-4 py-4 text-center">
-                                         <span className="text-base font-black text-white italic tabular-nums">{l.lama_stampo_misura || '--'}</span>
-                                      </td>
-                                      <td className="px-4 py-4 text-center">
-                                         <span className="text-base font-black text-indigo-400 italic tabular-nums">{l.lama_stampo_misura_attuale || l.lama_stampo_misura}</span>
-                                      </td>
-                                      <td className="px-4 py-4 text-center">
-                                         <span className="inline-flex items-center gap-1 bg-amber-600/10 text-amber-500 px-3 py-1 rounded-xl border border-amber-500/20 font-black italic tabular-nums">
-                                            {l.lama_stampo_quantita || 1}
-                                         </span>
-                                      </td>
-                                      <td className="px-4 py-4 text-right">
-                                         <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                            {isOperator ? (
-                                              <>
-                                                <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
-                                                <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
-                                                <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
-                                              </>
-                                            ) : (
-                                              <Eye size={12} className="text-slate-600" />
-                                            )}
-                                         </div>
-                                      </td>
-                                   </tr>
-                                 ))}
-                              </tbody>
-                           </table>
-                        </div>
+                  {/* Widget Totali Laterali (Stile Foto) */}
+                  <div className="lg:w-80 space-y-4 shrink-0">
+                     <div className="bg-[#1e293b] rounded-xl p-6 border-l-8 border-blue-500 shadow-xl">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">TOTALE {typeKey}</p>
+                        <p className="text-5xl font-black text-white italic tabular-nums leading-none">
+                          {data.totalQta}
+                        </p>
                      </div>
-                   )}
-                </div>
-             </div>
-           ))}
+                     <div className="bg-[#1e293b] rounded-xl p-6 border-l-8 border-emerald-500 shadow-xl">
+                        <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">SVILUPPO TOTALE (MM)</p>
+                        <p className="text-4xl font-black text-white italic tabular-nums leading-none">
+                          {(data.totalLen / 1000).toFixed(3).replace('.', ',')}
+                        </p>
+                        <p className="text-[9px] font-bold text-white/30 uppercase mt-2">Valore calcolato su misura nominale</p>
+                     </div>
+                  </div>
+
+               </div>
+             );
+           })}
         </div>
       </div>
 
-      {showModal && isOperator && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 z-[2000] animate-in zoom-in-95 duration-200">
-           <div className="bg-[#1e293b] border border-white/10 rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden">
-              <div className="px-10 py-10 border-b border-white/5 flex justify-between items-center bg-indigo-600/5">
-                 <div className="flex items-center gap-5">
-                    <div className="w-14 h-14 bg-indigo-600 rounded-[1.2rem] flex items-center justify-center text-white shadow-xl">
-                       {editingLama ? <Pencil size={28} /> : !formData.id_lama_stampo ? <Copy size={28} /> : <Plus size={28} />}
+      {/* Navigazione Serie Inferiore (Stile Tab Excel) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[#cbd5e1] border-t-2 border-black/10 p-2 flex items-center overflow-x-auto gap-1 z-50">
+         <div className="flex items-center gap-2 px-4 border-r-2 border-black/10 mr-2 shrink-0">
+            <LayoutGrid size={16} className="text-slate-500" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Serie Attiva:</span>
+         </div>
+         {serie.map(s => (
+           <button 
+             key={s.id_lama_stampo_serie}
+             onClick={() => setActiveSerieId(s.id_lama_stampo_serie)}
+             className={`px-6 py-3 font-black text-[11px] uppercase tracking-tighter italic transition-all whitespace-nowrap rounded-t-xl border-x-2 border-t-2 ${
+               activeSerieId === s.id_lama_stampo_serie 
+                 ? 'bg-white text-blue-600 border-black/20 shadow-[-4px_-4px_10px_rgba(0,0,0,0.05)] translate-y-[-4px]' 
+                 : 'bg-slate-300 text-slate-500 border-transparent hover:bg-slate-200'
+             }`}
+           >
+             {s.lama_stampo_serie}
+           </button>
+         ))}
+         {isOperator && (
+            <button className="px-4 py-3 text-slate-400 hover:text-blue-600 transition-colors"><Plus size={20}/></button>
+         )}
+      </div>
+
+      {/* Modale Inserimento / Modifica */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 animate-in zoom-in duration-200">
+           <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-[0_30px_100px_rgba(0,0,0,0.5)] overflow-hidden">
+              <div className="bg-[#1e293b] p-8 text-white flex justify-between items-center">
+                 <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                       <Calculator size={24} />
                     </div>
                     <div>
-                       <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none">
-                         {editingLama ? 'Modifica' : !formData.id_lama_stampo && formData.lama_stampo_tipo !== 0 ? 'Clona' : 'Nuova'} Registrazione
-                       </h3>
-                       <p className="text-[9px] font-black text-indigo-400/60 uppercase tracking-widest mt-1">Dati tecnici Slitter</p>
+                       <h3 className="text-xl font-black uppercase italic tracking-tighter leading-none">Modulo Tecnico</h3>
+                       <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mt-1">{editingLama ? 'Aggiornamento Dati' : 'Nuovo Inserimento'}</p>
                     </div>
                  </div>
-                 <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white transition-colors p-2"><X size={24} /></button>
+                 <button onClick={() => setShowModal(false)} className="p-2 hover:bg-white/10 rounded-lg"><X /></button>
               </div>
 
               <form onSubmit={handleSave} className="p-10 space-y-6">
                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Categoria</label>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Tipo Componente</label>
                        <select 
                          value={formData.lama_stampo_tipo}
                          onChange={e => setFormData({...formData, lama_stampo_tipo: Number(e.target.value)})}
-                         className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all text-white"
+                         className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-xl font-bold outline-none transition-all"
                        >
-                          <option value={0}>Scegli Categoria...</option>
+                          <option value={0}>Seleziona...</option>
                           {tipi.map(t => <option key={t.id_tipo_lama_stampo} value={t.id_tipo_lama_stampo}>{t.tipo_lama_stampo}</option>)}
                        </select>
                     </div>
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Serie</label>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Serie Slitter</label>
                        <select 
                          value={formData.lama_stampo_serie || ''}
                          onChange={e => setFormData({...formData, lama_stampo_serie: e.target.value ? Number(e.target.value) : null})}
-                         className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all text-white"
+                         className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-xl font-bold outline-none transition-all"
                        >
-                          <option value="">Serie Generica...</option>
+                          <option value="">Generica...</option>
                           {serie.map(s => <option key={s.id_lama_stampo_serie} value={s.id_lama_stampo_serie}>{s.lama_stampo_serie}</option>)}
                        </select>
                     </div>
                  </div>
 
-                 <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-500 uppercase ml-2">M. Nominale</label>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Diametro Esterno (ATTUALE)</label>
                        <input 
                          type="number" step="0.01" required
-                         value={formData.lama_stampo_misura || ''} 
-                         onChange={e => setFormData({...formData, lama_stampo_misura: Number(e.target.value)})}
-                         className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-lg font-black text-center outline-none focus:border-indigo-500 transition-all text-white italic tabular-nums" 
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-indigo-400 uppercase ml-2">M. Attuale</label>
-                       <input 
-                         type="number" step="0.01"
+                         placeholder="Es: 180,00"
                          value={formData.lama_stampo_misura_attuale || ''} 
                          onChange={e => setFormData({...formData, lama_stampo_misura_attuale: Number(e.target.value)})}
-                         className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-lg font-black text-center outline-none focus:border-indigo-500 transition-all text-indigo-400 italic tabular-nums" 
+                         className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-xl font-black text-xl italic outline-none transition-all" 
                        />
                     </div>
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Quantità</label>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Larghezza Nominale</label>
                        <input 
-                         type="number" required
-                         value={formData.lama_stampo_quantita || ''} 
-                         onChange={e => setFormData({...formData, lama_stampo_quantita: Number(e.target.value)})}
-                         className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-lg font-black text-center outline-none focus:border-indigo-500 transition-all text-amber-500 italic tabular-nums" 
+                         type="number" step="0.01" required
+                         placeholder="Es: 10,00"
+                         value={formData.lama_stampo_misura || ''} 
+                         onChange={e => setFormData({...formData, lama_stampo_misura: Number(e.target.value)})}
+                         className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-xl font-black text-xl italic outline-none transition-all" 
                        />
                     </div>
                  </div>
 
-                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase ml-2">Macchina</label>
-                    <select 
-                      value={formData.id_macchina || ''}
-                      onChange={e => setFormData({...formData, id_macchina: e.target.value})}
-                      className="w-full p-4 bg-slate-900 border border-white/5 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all text-white"
-                    >
-                       {macchine.map(m => <option key={m.id_macchina} value={m.id_macchina}>{m.macchina}</option>)}
-                    </select>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Quantità Pezzi</label>
+                    <input 
+                      type="number" required
+                      value={formData.lama_stampo_quantita || ''} 
+                      onChange={e => setFormData({...formData, lama_stampo_quantita: Number(e.target.value)})}
+                      className="w-full p-5 bg-blue-50 border-2 border-blue-100 focus:border-blue-500 rounded-2xl font-black text-3xl text-center text-blue-600 italic outline-none transition-all tabular-nums" 
+                    />
                  </div>
 
                  <button 
                    type="submit"
                    disabled={loading}
-                   className="w-full py-6 bg-indigo-600 text-white font-black rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 mt-6"
+                   className="w-full py-6 bg-blue-600 text-white font-black rounded-2xl uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 mt-6 text-xs"
                  >
                     {loading ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
-                    {editingLama ? 'Salva Modifiche' : 'Registra Elemento'}
+                    {editingLama ? 'Aggiorna Database' : 'Registra Componente'}
                  </button>
               </form>
            </div>
@@ -493,9 +365,9 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       )}
 
       {loading && !showModal && (
-        <div className="fixed inset-0 bg-[#060a14]/70 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
-           <RefreshCw size={40} className="text-indigo-500 animate-spin mb-6" />
-           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 animate-pulse italic text-center px-6">Sincronizzazione registro tecnico...</p>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex flex-col items-center justify-center z-[1000]">
+           <RefreshCw size={50} className="text-blue-600 animate-spin mb-4" />
+           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-800">Allineamento Dati Officina...</p>
         </div>
       )}
     </div>
