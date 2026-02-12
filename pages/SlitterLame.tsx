@@ -144,6 +144,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
     const groups: Record<string, { items: LameStampo[], totalQta: number, totalLen: number, avgDiameter: string }> = {};
     
     currentSerie.forEach(l => {
+      // Usiamo il nome esatto dal database senza appiattirlo su "LAME"
       const tName = l.l_lame_stampi_tipi?.tipo_lama_stampo?.toUpperCase() || 'ALTRO';
       
       if (!groups[tName]) {
@@ -159,12 +160,10 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       }
     });
 
-    // Ordina i pezzi per misura all'interno di ogni gruppo
     Object.keys(groups).forEach(k => {
       groups[k].items.sort((a,b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
     });
 
-    // Ordina i gruppi: Lame standard sempre per prime, Gomme per ultime, altri in mezzo
     return Object.keys(groups)
       .sort((a, b) => {
         if (a === 'LAME') return -1;
