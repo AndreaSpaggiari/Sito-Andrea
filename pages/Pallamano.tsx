@@ -107,14 +107,23 @@ const Pallamano: React.FC<Props> = ({ profile }) => {
 
   const toggleTimer = () => setIsRunning(!isRunning);
 
+  // FUNZIONE RESET POTENZIATA
   const resetTimer = () => {
-    if (confirm("Azzerare tutto il cronometro?")) {
+    if (confirm("Azzerare completamente il cronometro di gara?")) {
+      // 1. Fermiamo l'intervallo immediatamente
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      // 2. Azzeriamo lo stato React
       setIsRunning(false);
       setElapsedSeconds(0);
+      // 3. Puliamo il LocalStorage
       localStorage.setItem('palla_elapsed_seconds', '0');
       localStorage.setItem('palla_is_running', 'false');
       localStorage.removeItem('palla_last_timestamp');
-      if (timerRef.current) clearInterval(timerRef.current);
+      // 4. Feedback sonoro o aptico se possibile
+      try { if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]); } catch(e){}
     }
   };
 

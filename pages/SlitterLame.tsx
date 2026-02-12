@@ -9,7 +9,7 @@ import {
 import { 
   ArrowLeft, Scissors, Plus, X, Pencil, Trash2, 
   RefreshCw, Search, Save, Settings2,
-  ChevronRight, Copy, History, AlertCircle, Layers, Eye
+  ChevronRight, Copy, History, AlertCircle, Layers, Eye, Ruler
 } from 'lucide-react';
 
 interface Props {
@@ -150,7 +150,7 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       return type.toLowerCase().includes(search) || s.toLowerCase().includes(search);
     });
 
-    const groups: Record<string, { series: Record<string, LameStampo[]>, standalone: LameStampo[] }> = {};
+    const groups: Record<string, { series: Record<string, Record<string, LameStampo[]>>, standalone: LameStampo[] }> = {};
     
     filtered.forEach(l => {
       const typeName = l.l_lame_stampi_tipi?.tipo_lama_stampo || 'ALTRO';
@@ -158,18 +158,20 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       
       if (l.l_lame_stampi_serie?.lama_stampo_serie) {
         const sName = l.l_lame_stampi_serie.lama_stampo_serie;
-        if (!groups[typeName].series[sName]) groups[typeName].series[sName] = [];
-        groups[typeName].series[sName].push(l);
+        const diameter = (l.lama_stampo_misura_attuale || l.lama_stampo_misura || 0).toString();
+        
+        if (!groups[typeName].series[sName]) groups[typeName].series[sName] = {};
+        if (!groups[typeName].series[sName][diameter]) groups[typeName].series[sName][diameter] = [];
+        
+        groups[typeName].series[sName][diameter].push(l);
       } else {
         groups[typeName].standalone.push(l);
       }
     });
 
+    // Ordinamento dei sottomultipli per diametro (decrescente)
     Object.keys(groups).forEach(tk => {
-      groups[tk].standalone.sort((a, b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
-      Object.keys(groups[tk].series).forEach(sk => {
-        groups[tk].series[sk].sort((a, b) => (a.lama_stampo_misura || 0) - (b.lama_stampo_misura || 0));
-      });
+      groups[tk].standalone.sort((a, b) => (b.lama_stampo_misura_attuale || 0) - (a.lama_stampo_misura_attuale || 0));
     });
 
     return groups;
@@ -184,7 +186,6 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
         </div>
       )}
 
-      {/* Header compattato ed elegante */}
       <div className="relative pt-12 pb-24 px-6 overflow-hidden border-b border-white/5 bg-slate-900/40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_-20%,_rgba(99,102,241,0.15),_transparent_50%)]"></div>
         <div className="relative z-10 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-end gap-6">
@@ -237,8 +238,6 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 -mt-10 relative z-20">
-        
-        {/* Lista Raggruppata */}
         <div className="space-y-12">
            {Object.keys(groupedData).length === 0 ? (
              <div className="py-40 text-center bg-white/[0.02] rounded-[3rem] border border-dashed border-white/10">
@@ -255,84 +254,99 @@ const SlitterLame: React.FC<Props> = ({ profile }) => {
                       <h3 className="text-xl font-black text-white uppercase italic tracking-tighter">{typeName}</h3>
                    </div>
                    <span className="bg-indigo-600/20 text-indigo-400 px-4 py-1 rounded-full text-[9px] font-black border border-indigo-500/20">
-                     {Object.values(group.series).flat().length + group.standalone.length} ELEMENTI
+                     Sincronizzato
                    </span>
                 </div>
                 
-                <div className="p-2">
-                   {/* Rendering SERIE */}
-                   {Object.entries(group.series).map(([sName, items]) => (
-                     <div key={sName} className="mb-6 last:mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <div className="px-8 py-4 bg-white/[0.03] border-l-4 border-indigo-500 flex justify-between items-center rounded-r-2xl mb-2">
+                <div className="p-4 sm:p-8">
+                   {/* Rendering SERIE con sottogruppi diametro */}
+                   {Object.entries(group.series).map(([sName, diameterGroups]) => (
+                     <div key={sName} className="mb-10 last:mb-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="px-8 py-5 bg-white/[0.03] border-l-4 border-indigo-500 flex justify-between items-center rounded-r-2xl mb-6 shadow-sm">
                            <div className="flex items-center gap-4">
-                              <Layers size={14} className="text-indigo-400" />
-                              <h4 className="text-sm font-black text-white uppercase italic tracking-tighter">SERIE: {sName}</h4>
+                              <Layers size={18} className="text-indigo-400" />
+                              <h4 className="text-lg font-black text-white uppercase italic tracking-tighter">SERIE: {sName}</h4>
                            </div>
-                           <div className="flex items-center gap-6">
-                              <div className="flex flex-col items-end">
-                                 <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Misura Attuale di Serie</span>
-                                 <span className="text-lg font-black text-indigo-400 italic tabular-nums">{items[0]?.lama_stampo_misura_attuale || items[0]?.lama_stampo_misura} <span className="text-[10px] not-italic opacity-40">mm</span></span>
-                              </div>
-                           </div>
+                           <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Multiple Diameters Check</span>
                         </div>
                         
-                        <div className="overflow-x-auto px-6">
-                           <table className="w-full text-left">
-                              <thead>
-                                 <tr className="text-[8px] font-black text-slate-600 uppercase tracking-widest border-b border-white/5">
-                                    <th className="px-4 py-3">Variante (Misura Nominale)</th>
-                                    <th className="px-4 py-3 text-center">Quantità</th>
-                                    <th className="px-4 py-3 text-right">Azioni</th>
-                                 </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/[0.02]">
-                                 {items.map(l => (
-                                   <tr key={l.id_lama_stampo} className="group hover:bg-white/[0.02] transition-colors">
-                                      <td className="px-4 py-4">
-                                         <div className="flex items-center gap-3">
-                                            <span className="text-base font-black text-white italic tabular-nums">{l.lama_stampo_misura || '--'} <span className="text-[10px] opacity-40 not-italic">mm</span></span>
-                                            <span className="text-[8px] font-bold text-slate-700 uppercase">ID: {l.id_lama_stampo}</span>
-                                         </div>
-                                      </td>
-                                      <td className="px-4 py-4 text-center">
-                                         <span className="inline-flex items-center gap-1 bg-amber-600/10 text-amber-500 px-3 py-1 rounded-xl border border-amber-500/20 font-black italic tabular-nums">
-                                            {l.lama_stampo_quantita || 1} <span className="text-[8px] opacity-60 not-italic">PZ</span>
-                                         </span>
-                                      </td>
-                                      <td className="px-4 py-4 text-right">
-                                         <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                                            {isOperator ? (
-                                              <>
-                                                <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5"><Copy size={12} /></button>
-                                                <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5"><Pencil size={12} /></button>
-                                                <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5"><Trash2 size={12} /></button>
-                                              </>
-                                            ) : (
-                                              <Eye size={12} className="text-slate-600" />
-                                            )}
-                                         </div>
-                                      </td>
-                                   </tr>
-                                 ))}
-                              </tbody>
-                           </table>
+                        <div className="space-y-8 pl-4 border-l border-white/5 ml-4">
+                           {Object.entries(diameterGroups).sort((a,b) => parseFloat(b[0]) - parseFloat(a[0])).map(([diameter, items]) => (
+                             <div key={diameter} className="bg-white/[0.01] rounded-2xl p-4 sm:p-6 border border-white/5">
+                                <div className="flex items-center justify-between mb-4 px-2">
+                                   <div className="flex items-center gap-3">
+                                      <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+                                         <Ruler size={14} />
+                                      </div>
+                                      <div>
+                                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1">Diametro Rilevato</p>
+                                         <p className="text-lg font-black text-white italic tabular-nums">{diameter} <span className="text-[10px] not-italic opacity-40">mm</span></p>
+                                      </div>
+                                   </div>
+                                   <span className="bg-slate-800 px-3 py-1 rounded-full text-[8px] font-bold text-slate-400 uppercase">{items.length} Pezzi in Stock</span>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                   <table className="w-full text-left">
+                                      <thead>
+                                         <tr className="text-[8px] font-black text-slate-600 uppercase tracking-widest border-b border-white/5">
+                                            <th className="px-4 py-3">Variante (Misura Nominale)</th>
+                                            <th className="px-4 py-3 text-center">Quantità Tot.</th>
+                                            <th className="px-4 py-3 text-right">Strumenti</th>
+                                         </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-white/[0.02]">
+                                         {items.map(l => (
+                                           <tr key={l.id_lama_stampo} className="group hover:bg-white/[0.02] transition-colors">
+                                              <td className="px-4 py-4">
+                                                 <div className="flex items-center gap-3">
+                                                    <span className="text-base font-black text-white italic tabular-nums">{l.lama_stampo_misura || '--'} <span className="text-[10px] opacity-40 not-italic">mm</span></span>
+                                                    <span className="text-[8px] font-bold text-slate-700 uppercase px-2 py-0.5 bg-white/5 rounded">ID {l.id_lama_stampo}</span>
+                                                 </div>
+                                              </td>
+                                              <td className="px-4 py-4 text-center">
+                                                 <span className="inline-flex items-center gap-1 bg-amber-600/10 text-amber-500 px-3 py-1 rounded-xl border border-amber-500/20 font-black italic tabular-nums">
+                                                    {l.lama_stampo_quantita || 1} <span className="text-[8px] opacity-60 not-italic">PZ</span>
+                                                 </span>
+                                              </td>
+                                              <td className="px-4 py-4 text-right">
+                                                 <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                                                    {isOperator ? (
+                                                      <>
+                                                        <button onClick={() => handleDuplicate(l)} className="p-2 bg-white/5 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all border border-white/5" title="Clona"><Copy size={12} /></button>
+                                                        <button onClick={() => { setEditingLama(l); setFormData(l); setShowModal(true); }} className="p-2 bg-white/5 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-xl transition-all border border-white/5" title="Modifica"><Pencil size={12} /></button>
+                                                        <button onClick={() => handleDelete(l.id_lama_stampo)} className="p-2 bg-white/5 text-slate-400 hover:bg-rose-600 hover:text-white rounded-xl transition-all border border-white/5" title="Elimina"><Trash2 size={12} /></button>
+                                                      </>
+                                                    ) : (
+                                                      <Eye size={12} className="text-slate-600" />
+                                                    )}
+                                                 </div>
+                                              </td>
+                                           </tr>
+                                         ))}
+                                      </tbody>
+                                   </table>
+                                </div>
+                             </div>
+                           ))}
                         </div>
                      </div>
                    ))}
 
                    {/* Rendering STANDALONE (Senza Serie) */}
                    {group.standalone.length > 0 && (
-                     <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="px-8 py-2 border-b border-white/5 mb-4">
-                           <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Elementi Singoli / Stampi</h4>
+                     <div className="mt-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="px-8 py-3 border-b border-white/5 mb-6 flex items-center gap-4">
+                           <div className="w-1.5 h-1.5 bg-slate-500 rounded-full"></div>
+                           <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Elementi Singoli / Stampi Fuori Serie</h4>
                         </div>
                         <div className="overflow-x-auto px-6 pb-4">
                            <table className="w-full text-left">
                               <thead>
                                  <tr className="text-[8px] font-black text-slate-600 uppercase tracking-widest border-b border-white/5">
                                     <th className="px-4 py-3">Identificativo</th>
-                                    <th className="px-4 py-3 text-center">Misura Nominale</th>
-                                    <th className="px-4 py-3 text-center">Misura Attuale</th>
+                                    <th className="px-4 py-3 text-center">M. Nominale</th>
+                                    <th className="px-4 py-3 text-center">M. Attuale</th>
                                     <th className="px-4 py-3 text-center">Quantità</th>
                                     <th className="px-4 py-3 text-right">Azioni</th>
                                  </tr>
