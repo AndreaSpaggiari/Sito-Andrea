@@ -146,7 +146,6 @@ const Produzione: React.FC<Props> = ({ profile }) => {
       });
   }, [lavorazioni, sortCriteria]);
 
-  // CALCOLO STATISTICHE CODA ATTESA
   const waitStats = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -307,52 +306,55 @@ const Produzione: React.FC<Props> = ({ profile }) => {
             </div>
           </div>
 
-          {/* COLONNA CODA ATTESA AGGIORNATA */}
+          {/* COLONNA CODA ATTESA AGGIORNATA NELLE PROPORZIONI */}
           <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[850px] flex flex-col">
-             <div className="px-10 py-8 flex justify-between items-center border-b border-white/5 bg-amber-600/[0.03]">
+             <div className="px-10 py-7 flex justify-between items-center border-b border-white/5 bg-amber-600/[0.04]">
                 <div className="flex items-center gap-4 text-white">
-                   <Layers size={22} className="text-amber-500" />
-                   <h2 className="font-black uppercase italic tracking-widest text-base">CODA ATTESA</h2>
+                   <Layers size={20} className="text-amber-500" />
+                   <h2 className="font-black uppercase italic tracking-[0.1em] text-sm">CODA ATTESA</h2>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex bg-black/30 p-1 rounded-xl border border-white/5">
                    {['SCHEDA', 'CLIENTE', 'MISURA', 'DATA'].map(c => (
-                     <button key={c} onClick={() => setSortCriteria(c.toLowerCase() as any)} className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${sortCriteria === c.toLowerCase() ? 'bg-amber-600 text-slate-950' : 'bg-white/5 text-white/40 hover:text-white'}`}>{c}</button>
+                     <button key={c} onClick={() => setSortCriteria(c.toLowerCase() as any)} className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all tracking-wider ${sortCriteria === c.toLowerCase() ? 'bg-amber-600 text-slate-950 shadow-lg' : 'text-white/30 hover:text-white'}`}>{c}</button>
                    ))}
                 </div>
              </div>
 
-             {/* DASHBOARD STATISTICHE RAPIDE */}
-             <div className="grid grid-cols-3 gap-3 px-8 py-4 bg-amber-600/[0.03] border-b border-white/5">
-                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">TOTALI ATTESA</p>
-                   <p className="text-sm font-black text-white italic">
-                      {waitStats.total.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
-                      | {waitStats.total.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+             {/* DASHBOARD STATISTICHE RAPIDE - DIMENSIONI OTTIMIZZATE */}
+             <div className="grid grid-cols-3 gap-3 px-6 py-5 bg-amber-600/[0.02] border-b border-white/5">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-center">
+                   <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1 leading-none">TOTALI ATTESA</p>
+                   <p className="text-lg font-black text-white italic tabular-nums leading-none mt-1">
+                      {waitStats.total.count}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">S</span>
+                      <span className="mx-1.5 opacity-20">/</span>
+                      {waitStats.total.kg.toLocaleString()}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">K</span>
                    </p>
                 </div>
-                <div className="bg-rose-500/10 p-4 rounded-2xl border border-rose-500/20">
+                <div className="bg-rose-500/10 p-4 rounded-2xl border border-rose-500/20 flex flex-col justify-center">
                    <div className="flex items-center gap-1.5 mb-1">
-                      <AlertTriangle size={10} className="text-rose-500" />
-                      <p className="text-[8px] font-black text-rose-500 uppercase tracking-widest">SCADUTI</p>
+                      <AlertTriangle size={8} className="text-rose-500" />
+                      <p className="text-[7px] font-black text-rose-500 uppercase tracking-widest leading-none">SCADUTI</p>
                    </div>
-                   <p className="text-sm font-black text-rose-400 italic">
-                      {waitStats.expired.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
-                      | {waitStats.expired.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+                   <p className="text-lg font-black text-rose-400 italic tabular-nums leading-none mt-1">
+                      {waitStats.expired.count}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">S</span>
+                      <span className="mx-1.5 opacity-20">/</span>
+                      {waitStats.expired.kg.toLocaleString()}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">K</span>
                    </p>
                 </div>
-                <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+                <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 flex flex-col justify-center">
                    <div className="flex items-center gap-1.5 mb-1">
-                      <Clock size={10} className="text-amber-500" />
-                      <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest">URGENTI (7G)</p>
+                      <Clock size={8} className="text-amber-500" />
+                      <p className="text-[7px] font-black text-amber-500 uppercase tracking-widest leading-none">URGENTI (7G)</p>
                    </div>
-                   <p className="text-sm font-black text-amber-400 italic">
-                      {waitStats.urgent.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
-                      | {waitStats.urgent.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+                   <p className="text-lg font-black text-amber-400 italic tabular-nums leading-none mt-1">
+                      {waitStats.urgent.count}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">S</span>
+                      <span className="mx-1.5 opacity-20">/</span>
+                      {waitStats.urgent.kg.toLocaleString()}<span className="text-[9px] font-bold opacity-30 not-italic ml-0.5">K</span>
                    </p>
                 </div>
              </div>
 
-             <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
+             <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
                 {attItems.map(l => {
                   const now = new Date();
                   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -368,49 +370,49 @@ const Produzione: React.FC<Props> = ({ profile }) => {
                   }
 
                   return (
-                    <div key={l.id_lavorazione} className="bg-amber-400/20 border border-amber-400/30 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/30 transition-all relative">
-                       <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-4">
-                             <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
-                             <div className="flex gap-2">
-                               <span className="bg-amber-600/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-100 uppercase border border-amber-600/30">{l.mcoil_lega} <span className="opacity-50">{l.mcoil_stato_fisico}</span></span>
+                    <div key={l.id_lavorazione} className="bg-amber-400/10 border border-amber-400/20 p-6 rounded-[2rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/15 transition-all relative overflow-hidden">
+                       <div className="flex flex-col gap-2 relative z-10">
+                          <div className="flex items-center gap-3">
+                             <span className="text-2xl font-black text-white italic leading-none tabular-nums">{l.scheda}</span>
+                             <div className="flex gap-1.5">
+                               <span className="bg-amber-600/20 px-2 py-0.5 rounded text-[7px] font-black text-amber-200 uppercase border border-amber-600/30">{l.mcoil_lega} <span className="opacity-40 ml-1">{l.mcoil_stato_fisico}</span></span>
                              </div>
                           </div>
-                          <h4 className="text-xl font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
+                          <h4 className="text-base font-bold text-white uppercase leading-tight truncate max-w-[180px] tracking-tight">{l.l_clienti?.cliente}</h4>
                           {l.data_consegna && (
-                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold w-fit ${
+                            <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border font-black w-fit mt-1 ${
                               dateStatus === 'expired' ? 'bg-rose-500/20 border-rose-500/30 text-rose-500' :
                               dateStatus === 'urgent' ? 'bg-amber-500/20 border-amber-500/30 text-amber-500' :
-                              'bg-white/5 border-white/5 text-white/40'
+                              'bg-white/5 border-white/5 text-white/30'
                             }`}>
-                              {dateStatus === 'expired' ? <AlertTriangle size={12} /> : <Calendar size={12} />}
-                              <span className="text-[10px] uppercase tracking-widest leading-none pt-0.5">D.Cli: {formatDateForDisplay(l.data_consegna)}</span>
+                              {dateStatus === 'expired' ? <AlertTriangle size={10} /> : <Calendar size={10} />}
+                              <span className="text-[8px] uppercase tracking-widest leading-none pt-0.5">CONSEGNA: {formatDateForDisplay(l.data_consegna)}</span>
                             </div>
                           )}
                        </div>
 
-                       <div className="flex items-center gap-10">
-                          <div className="flex gap-10 text-right items-center">
+                       <div className="flex items-center gap-6 relative z-10">
+                          <div className="flex gap-8 text-right items-center">
                              <div className="text-center">
-                                <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">ORDINATO KG</span>
-                                <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
+                                <span className="text-[8px] font-black text-white/30 uppercase block mb-1 tracking-tighter">KG ORDINE</span>
+                                <span className="text-sm font-black text-white italic tabular-nums">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
                              </div>
                              <div className="text-center">
-                                <span className="text-[9px] font-bold text-sky-400/60 uppercase block mb-1">SPESSORE</span>
-                                <span className="text-base font-black text-sky-400 italic tabular-nums">{l.spessore}</span>
+                                <span className="text-[8px] font-black text-sky-400/40 uppercase block mb-1 tracking-tighter">SPESSORE</span>
+                                <span className="text-sm font-black text-sky-400 italic tabular-nums">{l.spessore}</span>
                              </div>
                              <div className="text-center">
-                                <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">MISURA</span>
-                                <span className="text-2xl font-black text-amber-400 italic tabular-nums">{l.misura}</span>
+                                <span className="text-[8px] font-black text-amber-500/40 uppercase block mb-1 tracking-tighter">MISURA</span>
+                                <span className="text-xl font-black text-amber-400 italic tabular-nums">{l.misura}</span>
                              </div>
                           </div>
                           {isOperator ? (
-                            <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-500 text-slate-900 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-400 transition-all group-hover:shadow-amber-500/40">
-                               <Plus size={24} />
+                            <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-10 h-10 bg-amber-500 text-slate-900 rounded-xl flex items-center justify-center shadow-xl active:scale-90 hover:bg-amber-400 transition-all hover:shadow-amber-500/40">
+                               <Plus size={20} />
                             </button>
                           ) : (
-                            <div className="w-12 h-12 bg-white/5 text-white/10 rounded-xl flex items-center justify-center border border-dashed border-white/10">
-                               <Eye size={18} />
+                            <div className="w-10 h-10 bg-white/5 text-white/10 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+                               <Eye size={16} />
                             </div>
                           )}
                        </div>
@@ -421,6 +423,8 @@ const Produzione: React.FC<Props> = ({ profile }) => {
           </div>
         </div>
       </div>
+      
+      {/* ... (Resto dei modali invariato per brevità, mantenendo l'operatività) */}
 
       {showMacchinaPicker && (
         <div className="fixed inset-0 bg-[#0a0f1a]/95 backdrop-blur-2xl flex items-center justify-center p-4 z-[1000] animate-in fade-in duration-300">
