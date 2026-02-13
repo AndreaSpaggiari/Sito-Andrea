@@ -15,7 +15,7 @@ import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, CheckCircle2, X, 
   Activity, Plus, Settings2, Calendar, Inbox, 
-  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert
+  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert, Clock, AlertTriangle
 } from 'lucide-react';
 
 interface Props {
@@ -146,6 +146,41 @@ const Produzione: React.FC<Props> = ({ profile }) => {
       });
   }, [lavorazioni, sortCriteria]);
 
+  // CALCOLO STATISTICHE CODA ATTESA
+  const waitStats = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    const stats = {
+      total: { count: 0, kg: 0 },
+      expired: { count: 0, kg: 0 },
+      urgent: { count: 0, kg: 0 }
+    };
+
+    attItems.forEach(l => {
+      const kg = l.ordine_kg_richiesto || 0;
+      stats.total.count++;
+      stats.total.kg += kg;
+
+      if (l.data_consegna) {
+        const d = new Date(l.data_consegna);
+        const dStripped = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        
+        if (dStripped < today) {
+          stats.expired.count++;
+          stats.expired.kg += kg;
+        } else if (dStripped >= today && dStripped <= nextWeek) {
+          stats.urgent.count++;
+          stats.urgent.kg += kg;
+        }
+      }
+    });
+
+    return stats;
+  }, [attItems]);
+
   const currentMacchinaName = useMemo(() => macchine.find(m => m.id_macchina === selectedMacchina)?.macchina || 'POSTAZIONE', [macchine, selectedMacchina]);
 
   return (
@@ -272,6 +307,7 @@ const Produzione: React.FC<Props> = ({ profile }) => {
             </div>
           </div>
 
+          {/* COLONNA CODA ATTESA AGGIORNATA */}
           <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[850px] flex flex-col">
              <div className="px-10 py-8 flex justify-between items-center border-b border-white/5 bg-amber-600/[0.03]">
                 <div className="flex items-center gap-4 text-white">
@@ -285,52 +321,102 @@ const Produzione: React.FC<Props> = ({ profile }) => {
                 </div>
              </div>
 
-             <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
-                {attItems.map(l => (
-                  <div key={l.id_lavorazione} className="bg-amber-400/20 border border-amber-400/30 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/30 transition-all relative">
-                     <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-4">
-                           <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
-                           <div className="flex gap-2">
-                             <span className="bg-amber-600/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-100 uppercase border border-amber-600/30">{l.mcoil_lega} <span className="opacity-50">{l.mcoil_stato_fisico}</span></span>
-                           </div>
-                        </div>
-                        <h4 className="text-xl font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
-                        {l.data_consegna && (
-                          <div className="flex items-center gap-1.5">
-                            <Calendar size={10} className="text-amber-500" />
-                            <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">D.Cli: {formatDateForDisplay(l.data_consegna)}</span>
-                          </div>
-                        )}
-                     </div>
+             {/* DASHBOARD STATISTICHE RAPIDE */}
+             <div className="grid grid-cols-3 gap-3 px-8 py-4 bg-amber-600/[0.03] border-b border-white/5">
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">TOTALI ATTESA</p>
+                   <p className="text-sm font-black text-white italic">
+                      {waitStats.total.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
+                      | {waitStats.total.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+                   </p>
+                </div>
+                <div className="bg-rose-500/10 p-4 rounded-2xl border border-rose-500/20">
+                   <div className="flex items-center gap-1.5 mb-1">
+                      <AlertTriangle size={10} className="text-rose-500" />
+                      <p className="text-[8px] font-black text-rose-500 uppercase tracking-widest">SCADUTI</p>
+                   </div>
+                   <p className="text-sm font-black text-rose-400 italic">
+                      {waitStats.expired.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
+                      | {waitStats.expired.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+                   </p>
+                </div>
+                <div className="bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
+                   <div className="flex items-center gap-1.5 mb-1">
+                      <Clock size={10} className="text-amber-500" />
+                      <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest">URGENTI (7G)</p>
+                   </div>
+                   <p className="text-sm font-black text-amber-400 italic">
+                      {waitStats.urgent.count} <span className="text-[10px] opacity-40 not-italic mr-1">SCH</span> 
+                      | {waitStats.urgent.kg.toLocaleString()} <span className="text-[10px] opacity-40 not-italic">KG</span>
+                   </p>
+                </div>
+             </div>
 
-                     <div className="flex items-center gap-10">
-                        <div className="flex gap-10 text-right items-center">
-                           <div className="text-center">
-                              <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">ORDINATO KG</span>
-                              <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
-                           </div>
-                           <div className="text-center">
-                              <span className="text-[9px] font-bold text-sky-400/60 uppercase block mb-1">SPESSORE</span>
-                              <span className="text-base font-black text-sky-400 italic tabular-nums">{l.spessore}</span>
-                           </div>
-                           <div className="text-center">
-                              <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">MISURA</span>
-                              <span className="text-2xl font-black text-amber-400 italic tabular-nums">{l.misura}</span>
-                           </div>
-                        </div>
-                        {isOperator ? (
-                          <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-500 text-slate-900 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-400 transition-all group-hover:shadow-amber-500/40">
-                             <Plus size={24} />
-                          </button>
-                        ) : (
-                          <div className="w-12 h-12 bg-white/5 text-white/10 rounded-xl flex items-center justify-center border border-dashed border-white/10">
-                             <Eye size={18} />
+             <div className="p-8 space-y-4 overflow-y-auto custom-scrollbar">
+                {attItems.map(l => {
+                  const now = new Date();
+                  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  const nextWeek = new Date(today);
+                  nextWeek.setDate(today.getDate() + 7);
+
+                  let dateStatus: 'expired' | 'urgent' | 'normal' = 'normal';
+                  if (l.data_consegna) {
+                    const d = new Date(l.data_consegna);
+                    const dStripped = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                    if (dStripped < today) dateStatus = 'expired';
+                    else if (dStripped <= nextWeek) dateStatus = 'urgent';
+                  }
+
+                  return (
+                    <div key={l.id_lavorazione} className="bg-amber-400/20 border border-amber-400/30 p-8 rounded-[2.5rem] shadow-xl flex items-center justify-between group hover:bg-amber-400/30 transition-all relative">
+                       <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-4">
+                             <span className="text-3xl font-black text-white italic leading-none">{l.scheda}</span>
+                             <div className="flex gap-2">
+                               <span className="bg-amber-600/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-100 uppercase border border-amber-600/30">{l.mcoil_lega} <span className="opacity-50">{l.mcoil_stato_fisico}</span></span>
+                             </div>
                           </div>
-                        )}
-                     </div>
-                  </div>
-                ))}
+                          <h4 className="text-xl font-bold text-white uppercase leading-tight truncate max-w-[200px]">{l.l_clienti?.cliente}</h4>
+                          {l.data_consegna && (
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold w-fit ${
+                              dateStatus === 'expired' ? 'bg-rose-500/20 border-rose-500/30 text-rose-500' :
+                              dateStatus === 'urgent' ? 'bg-amber-500/20 border-amber-500/30 text-amber-500' :
+                              'bg-white/5 border-white/5 text-white/40'
+                            }`}>
+                              {dateStatus === 'expired' ? <AlertTriangle size={12} /> : <Calendar size={12} />}
+                              <span className="text-[10px] uppercase tracking-widest leading-none pt-0.5">D.Cli: {formatDateForDisplay(l.data_consegna)}</span>
+                            </div>
+                          )}
+                       </div>
+
+                       <div className="flex items-center gap-10">
+                          <div className="flex gap-10 text-right items-center">
+                             <div className="text-center">
+                                <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">ORDINATO KG</span>
+                                <span className="text-base font-black text-white italic whitespace-nowrap">{l.ordine_kg_richiesto?.toLocaleString() || '--'}</span>
+                             </div>
+                             <div className="text-center">
+                                <span className="text-[9px] font-bold text-sky-400/60 uppercase block mb-1">SPESSORE</span>
+                                <span className="text-base font-black text-sky-400 italic tabular-nums">{l.spessore}</span>
+                             </div>
+                             <div className="text-center">
+                                <span className="text-[9px] font-bold text-white/40 uppercase block mb-1">MISURA</span>
+                                <span className="text-2xl font-black text-amber-400 italic tabular-nums">{l.misura}</span>
+                             </div>
+                          </div>
+                          {isOperator ? (
+                            <button onClick={() => updateStato(l.id_lavorazione, Stati.PRE)} className="w-12 h-12 bg-amber-500 text-slate-900 rounded-xl flex items-center justify-center shadow-xl active:scale-95 hover:bg-amber-400 transition-all group-hover:shadow-amber-500/40">
+                               <Plus size={24} />
+                            </button>
+                          ) : (
+                            <div className="w-12 h-12 bg-white/5 text-white/10 rounded-xl flex items-center justify-center border border-dashed border-white/10">
+                               <Eye size={18} />
+                            </div>
+                          )}
+                       </div>
+                    </div>
+                  );
+                })}
              </div>
           </div>
         </div>
@@ -395,7 +481,7 @@ const Produzione: React.FC<Props> = ({ profile }) => {
 
       {showFasePicker && isOperator && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-[1500] p-4">
-          <div className="bg-white/[0.02] border border-white/10 rounded-[3rem] p-10 w-full max-w-sm shadow-2xl text-center flex flex-col gap-10">
+          <div className="bg-white/[0.02] border border-white/10 rounded-[3rem] p-10 w-full max-sm shadow-2xl text-center flex flex-col gap-10">
             <div>
                <h3 className="text-xs font-black uppercase tracking-[0.4em] text-white/30 italic mb-2">SETUP PROCESSO</h3>
                <p className="text-xl font-bold text-white">Scegli Tipo Lavorazione</p>
