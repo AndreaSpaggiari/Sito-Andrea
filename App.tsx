@@ -15,6 +15,8 @@ import SlitterPiccolo from './pages/SlitterPiccolo';
 import SlitterLame from './pages/SlitterLame';
 import SlitterNuovoLame from './pages/SlitterNuovoLame';
 import Personale from './pages/Personale';
+import BG3Home from './pages/BG3Home';
+import BG3Act1Checklist from './pages/BG3Act1Checklist';
 import Login from './pages/Login';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -168,6 +170,18 @@ const App: React.FC = () => {
           <Route path="/personale" element={
             <ProtectedRoute session={session} section="PERSONALE" profile={profile}>
               <Personale />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/personale/bg3" element={
+            <ProtectedRoute session={session} section="PERSONALE" profile={profile}>
+              <BG3Home />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/personale/bg3/atto1" element={
+            <ProtectedRoute session={session} section="PERSONALE" profile={profile}>
+              <BG3Act1Checklist />
             </ProtectedRoute>
           } />
 

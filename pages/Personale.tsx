@@ -1,11 +1,13 @@
 
 import React from 'react';
-import { User, Home as House, Folder, Plus, Shield, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { User, Home as House, Folder, Plus, Shield, Zap, Swords } from 'lucide-react';
 
 const Personale: React.FC = () => {
   const subsections = [
-    { title: "Casa", desc: "Gestione Spese & Manutenzione", icon: House, num: "01" },
-    { title: "Varie", desc: "Diario & Memo Personali", icon: Folder, num: "02" },
+    { title: "Baldur's Gate 3", desc: "Guide & Checklist Perfect Run", icon: Swords, num: "01", link: "/personale/bg3", color: "bg-purple-600" },
+    { title: "Casa", desc: "Gestione Spese & Manutenzione", icon: House, num: "02", link: "#", color: "bg-blue-600" },
+    { title: "Varie", desc: "Diario & Memo Personali", icon: Folder, num: "03", link: "#", color: "bg-amber-600" },
   ];
 
   return (
@@ -25,20 +27,20 @@ const Personale: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 -mt-16 relative z-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="max-w-6xl mx-auto px-4 -mt-16 relative z-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {subsections.map((sub, idx) => (
-            <div key={idx} className="bg-slate-900/80 backdrop-blur-xl border border-white/5 rounded-[3rem] p-10 group hover:bg-emerald-600 transition-all duration-500 overflow-hidden relative shadow-2xl">
+            <Link key={idx} to={sub.link} className={`bg-slate-900/80 backdrop-blur-xl border border-white/5 rounded-[3rem] p-10 group hover:${sub.color} transition-all duration-500 overflow-hidden relative shadow-2xl block`}>
               <div className="absolute top-4 right-8 text-7xl font-black text-white/[0.03] group-hover:text-white/10 transition-colors">{sub.num}</div>
-              <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-emerald-500 group-hover:bg-white group-hover:text-emerald-600 transition-all mb-8 shadow-inner">
+              <div className={`w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-emerald-500 group-hover:bg-white group-hover:text-slate-950 transition-all mb-8 shadow-inner`}>
                 <sub.icon size={32} />
               </div>
               <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-1 leading-none">{sub.title}</h3>
               <p className="text-slate-500 font-bold text-xs uppercase tracking-widest group-hover:text-white/80">{sub.desc}</p>
-              <button className="mt-8 bg-slate-950/50 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white hover:text-emerald-600 transition-all active:scale-95 group-hover:shadow-lg">
+              <div className="mt-8 inline-block bg-slate-950/50 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white hover:text-slate-950 transition-all active:scale-95 group-hover:shadow-lg">
                  Accedi Ora →
-              </button>
-            </div>
+              </div>
+            </Link>
           ))}
         </div>
 
