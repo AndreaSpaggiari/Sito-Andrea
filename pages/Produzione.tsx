@@ -15,7 +15,7 @@ import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, CheckCircle2, X, 
   Activity, Plus, Settings2, Calendar, Inbox, 
-  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert, Clock, AlertTriangle
+  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert, Clock, AlertTriangle, Monitor
 } from 'lucide-react';
 
 interface Props {
@@ -32,6 +32,28 @@ const formatDateForDisplay = (dateStr: string | null) => {
 };
 
 const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+/**
+ * Funzione di parsing intelligente per i numeri KME
+ * Gestisce migliaia col punto (1.400 -> 1400) e decimali con virgola (0,50 -> 0.5)
+ */
+const parseNum = (val: any) => {
+  if (val === undefined || val === null || val === '') return 0;
+  let s = String(val).trim().replace(/\s/g, '');
+  
+  if (s.includes('.') && s.includes(',')) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  }
+  if (s.includes(',')) {
+    return parseFloat(s.replace(',', '.'));
+  }
+  if (s.includes('.')) {
+    const n = parseFloat(s);
+    if (n > 10) return parseFloat(s.replace(/\./g, ''));
+    return n;
+  }
+  return parseFloat(s) || 0;
+};
 
 const Produzione: React.FC<Props> = ({ profile }) => {
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('VISUALIZZATORE');
@@ -51,6 +73,8 @@ const Produzione: React.FC<Props> = ({ profile }) => {
   const [showMagazzinoPicker, setShowMagazzinoPicker] = useState(false);
   const [showFasePicker, setShowFasePicker] = useState<{ id: string } | null>(null);
   const [showTerminaPicker, setShowTerminaPicker] = useState<Lavorazione | null>(null);
+  const [showDestinazionePicker, setShowDestinazionePicker] = useState(false);
+  const [pendingMultiploJob, setPendingMultiploJob] = useState<any>(null);
   const [sortCriteria, setSortCriteria] = useState<'scheda' | 'cliente' | 'data' | 'misura'>('scheda');
 
   const isOperator = profile?.role === 'ADMIN' || accessLevel === 'OPERATORE';
@@ -113,12 +137,75 @@ const Produzione: React.FC<Props> = ({ profile }) => {
     fetchLavorazioni(false);
   };
 
+  /**
+   * TERMINA LAVORAZIONE CON LOGICA MULTIPLO
+   */
   const finishLavorazione = async (l: Lavorazione, kg: number, metri: number, nastri: number, pezzi: number) => {
     if (!isOperator) return;
     setLoading(true);
-    await supabase.from('l_lavorazioni').update({ id_stato: Stati.TER, fine_lavorazione: new Date().toISOString(), ordine_kg_lavorato: kg, metri_avvolti: metri, numero_passate: nastri, numero_pezzi: pezzi }).eq('id_lavorazione', l.id_lavorazione);
+    setLoadingMsg('REGISTRAZIONE...');
+
+    // 1. Chiude la lavorazione attuale
+    await supabase.from('l_lavorazioni').update({ 
+      id_stato: Stati.TER, 
+      fine_lavorazione: new Date().toISOString(), 
+      ordine_kg_lavorato: kg, 
+      metri_avvolti: metri, 
+      numero_passate: nastri, 
+      numero_pezzi: pezzi 
+    }).eq('id_lavorazione', l.id_lavorazione);
+
+    // 2. Prepariamo i dati per l'eventuale nuovo record (multiplo)
+    const faseNome = (l.l_fasi_di_lavorazione?.fase_di_lavorazione || '').toUpperCase();
+    
+    if (faseNome.includes('MULTIPLO')) {
+      const isAltraMacchina = faseNome.includes('ALTRA MACCHINA');
+      
+      const { id_lavorazione, l_clienti, l_macchine, l_fasi_di_lavorazione, ...cleanData } = l;
+      const newJobBase = {
+        ...cleanData,
+        id_stato: Stati.ATT,
+        id_fase: 'ATT', 
+        inizio_lavorazione: null,
+        fine_lavorazione: null,
+        ordine_kg_lavorato: null,
+        metri_avvolti: null,
+        numero_passate: null,
+        numero_pezzi: null,
+        attesa_lavorazione: new Date().toISOString()
+      };
+
+      if (isAltraMacchina) {
+        // Invece di mandarlo in magazzino, apriamo il picker della macchina
+        setPendingMultiploJob(newJobBase);
+        setShowDestinazionePicker(true);
+        setShowTerminaPicker(null);
+        setLoading(false);
+        return; // Fermiamo qui per ora
+      } else {
+        // Multiplo standard sulla stessa macchina
+        await supabase.from('l_lavorazioni').insert([{ ...newJobBase, id_macchina: l.id_macchina }]);
+      }
+    }
+
     setShowTerminaPicker(null);
-    fetchLavorazioni(false);
+    await fetchLavorazioni(false);
+    await fetchMagazzino();
+    setLoading(false);
+  };
+
+  const handleConfirmDestinazione = async (machineId: string) => {
+    if (!pendingMultiploJob || !isOperator) return;
+    setLoading(true);
+    setLoadingMsg('ASSEGNAZIONE...');
+    
+    await supabase.from('l_lavorazioni').insert([{ ...pendingMultiploJob, id_macchina: machineId }]);
+    
+    setShowDestinazionePicker(false);
+    setPendingMultiploJob(null);
+    await fetchLavorazioni(false);
+    await fetchMagazzino();
+    setLoading(false);
   };
 
   const proItems = useMemo(() => {
@@ -207,7 +294,7 @@ const Produzione: React.FC<Props> = ({ profile }) => {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
           
-          {/* ATTIVITÀ POSTAZIONE - LAYOUT CORRETTO SENZA SOVRAPPOSIZIONI */}
+          {/* ATTIVITÀ POSTAZIONE */}
           <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[800px] flex flex-col">
             <div className="px-10 py-7 flex justify-between items-center border-b border-white/5">
                <div className="flex items-center gap-4 text-white">
@@ -245,7 +332,6 @@ const Produzione: React.FC<Props> = ({ profile }) => {
                           </div>
                         </div>
 
-                        {/* DATI TECNICI CORRETTI - PIÙ SPAZIO */}
                         <div className="flex items-center gap-10 shrink-0">
                            <div className="flex gap-12 text-right">
                               <div className="flex flex-col">
@@ -282,7 +368,7 @@ const Produzione: React.FC<Props> = ({ profile }) => {
             </div>
           </div>
 
-          {/* CODA ATTESA - RIFINITURA PROPORZIONI */}
+          {/* CODA ATTESA */}
           <div className="bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden min-h-[800px] flex flex-col">
              <div className="px-10 py-7 flex justify-between items-center border-b border-white/5 bg-amber-600/[0.03]">
                 <div className="flex items-center gap-4 text-white">
@@ -296,7 +382,7 @@ const Produzione: React.FC<Props> = ({ profile }) => {
                 </div>
              </div>
 
-             {/* DASHBOARD KPI - PIÙ PULITA */}
+             {/* DASHBOARD KPI */}
              <div className="grid grid-cols-3 gap-3 px-8 py-5 border-b border-white/5 bg-amber-600/[0.01]">
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                    <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1 leading-none">TOTALI ATTESA</p>
@@ -465,6 +551,39 @@ const Produzione: React.FC<Props> = ({ profile }) => {
         <TerminaModal lavorazione={showTerminaPicker} onClose={() => setShowTerminaPicker(null)} onConfirm={finishLavorazione} />
       )}
 
+      {showDestinazionePicker && isOperator && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-[1600] p-4 animate-in fade-in duration-300">
+          <div className="bg-white/[0.02] border border-white/10 rounded-[3rem] p-10 w-full max-w-lg shadow-2xl text-center flex flex-col gap-8">
+            <div className="flex flex-col items-center gap-4">
+               <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-slate-900 shadow-xl shadow-amber-500/20">
+                  <Monitor size={32} />
+               </div>
+               <div>
+                 <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">Continua Processo</h3>
+                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mt-1">Scegli la macchina per la fase successiva</p>
+               </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+              {macchine.map(m => (
+                <button 
+                  key={m.id_macchina} 
+                  onClick={() => handleConfirmDestinazione(m.id_macchina)} 
+                  className="p-6 bg-white/5 hover:bg-blue-600 hover:text-white rounded-2xl font-black uppercase text-xs tracking-widest transition-all border border-white/5 shadow-xl active:scale-95 text-white/60"
+                >
+                  {m.macchina}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => { setShowDestinazionePicker(false); setPendingMultiploJob(null); fetchLavorazioni(false); }} 
+              className="text-[10px] font-black text-rose-500 hover:text-rose-400 uppercase tracking-widest transition-colors"
+            >
+              Annulla Operazione
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="fixed inset-0 bg-[#0a0f1a]/95 backdrop-blur-3xl flex flex-col items-center justify-center z-[9999]">
           <div className="w-20 h-20 border-4 border-white/5 border-t-blue-600 rounded-full animate-spin mb-8" />
@@ -483,8 +602,6 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
   const [pezzi, setPezzi] = useState<number>(lavorazione.numero_pezzi || 1);
   const [spessoreInput, setSpessoreInput] = useState<string>(String(lavorazione.spessore || ''));
   const [misuraInput, setMisuraInput] = useState<string>(String(lavorazione.misura || ''));
-
-  const parseNum = (val: any) => { if (!val) return 0; let s = String(val).trim().replace(',', '.'); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
 
   const metri = useMemo(() => {
     const p = parseNum(kgInput); const sp = parseNum(spessoreInput); const mi = parseNum(misuraInput); const n = parseNum(nastri); const pz = parseNum(pezzi);
