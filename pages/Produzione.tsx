@@ -15,7 +15,7 @@ import Chat from '../components/Chat';
 import { 
   ArrowLeft, RefreshCw, CheckCircle2, X, 
   Activity, Plus, Settings2, Calendar, Inbox, 
-  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert, Clock, AlertTriangle, Monitor
+  ChevronLeft, ChevronRight, PlayCircle, Layers, Box, Eye, ShieldAlert, Clock, AlertTriangle, Monitor, Edit3
 } from 'lucide-react';
 
 interface Props {
@@ -41,16 +41,24 @@ const parseNum = (val: any) => {
   if (val === undefined || val === null || val === '') return 0;
   let s = String(val).trim().replace(/\s/g, '');
   
+  // Se c'è sia punto che virgola (es: 1.400,50)
   if (s.includes('.') && s.includes(',')) {
     return parseFloat(s.replace(/\./g, '').replace(',', '.'));
   }
+  // Se c'è solo la virgola (es: 1,400 o 0,50)
   if (s.includes(',')) {
     return parseFloat(s.replace(',', '.'));
   }
+  // Se c'è solo il punto (es: 1.400 o 0.50)
   if (s.includes('.')) {
-    const n = parseFloat(s);
-    if (n > 10) return parseFloat(s.replace(/\./g, ''));
-    return n;
+    const parts = s.split('.');
+    const lastPart = parts[parts.length - 1];
+    // Se l'ultima parte ha 3 cifre e il numero totale è > 5, è un separatore delle migliaia
+    // Gli spessori sono solitamente < 5mm, i pesi e le larghezze molto di più.
+    if (lastPart.length === 3 && parseFloat(s.replace(/\./g, '')) > 5) {
+      return parseFloat(s.replace(/\./g, ''));
+    }
+    return parseFloat(s);
   }
   return parseFloat(s) || 0;
 };
@@ -176,14 +184,12 @@ const Produzione: React.FC<Props> = ({ profile }) => {
       };
 
       if (isAltraMacchina) {
-        // Invece di mandarlo in magazzino, apriamo il picker della macchina
         setPendingMultiploJob(newJobBase);
         setShowDestinazionePicker(true);
         setShowTerminaPicker(null);
         setLoading(false);
-        return; // Fermiamo qui per ora
+        return;
       } else {
-        // Multiplo standard sulla stessa macchina
         await supabase.from('l_lavorazioni').insert([{ ...newJobBase, id_macchina: l.id_macchina }]);
       }
     }
@@ -602,14 +608,33 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
   const [pezzi, setPezzi] = useState<number>(lavorazione.numero_pezzi || 1);
   const [spessoreInput, setSpessoreInput] = useState<string>(String(lavorazione.spessore || ''));
   const [misuraInput, setMisuraInput] = useState<string>(String(lavorazione.misura || ''));
+  
+  // Aggiunto stato per la sovrascrittura manuale dei metri
+  const [isMetriManual, setIsMetriManual] = useState(false);
+  const [metriInput, setMetriInput] = useState<string>('');
 
-  const metri = useMemo(() => {
-    const p = parseNum(kgInput); const sp = parseNum(spessoreInput); const mi = parseNum(misuraInput); const n = parseNum(nastri); const pz = parseNum(pezzi);
+  // Calcolo suggerito (originale)
+  const suggestedMetri = useMemo(() => {
+    const p = parseNum(kgInput); 
+    const sp = parseNum(spessoreInput); 
+    const mi = parseNum(misuraInput); 
+    const n = parseNum(nastri); 
+    const pz = parseNum(pezzi);
+    
     if (p <= 0 || sp <= 0 || mi <= 0) return 0;
+    
     const rho = (lavorazione.mcoil_lega || '').toUpperCase().includes('OT') ? 8.50 : 8.96;
     const metriTotali = ((p * 1000) / (rho * sp * mi * pz)) * n;
+    
     return isFinite(metriTotali) ? Math.round(metriTotali) : 0;
   }, [kgInput, spessoreInput, misuraInput, lavorazione.mcoil_lega, nastri, pezzi]);
+
+  // Sincronizzazione automatica se non manuale
+  useEffect(() => {
+    if (!isMetriManual) {
+      setMetriInput(String(suggestedMetri));
+    }
+  }, [suggestedMetri, isMetriManual]);
 
   return (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 z-[9999] animate-in zoom-in duration-300">
@@ -620,10 +645,20 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
              <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter mb-1">Dati Produzione</h3>
              <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.4em] italic leading-none">TERMINA SCHEDA {lavorazione.scheda}</p>
           </div>
+          
           <div className="bg-white/5 p-10 rounded-[3rem] border border-white/5 flex flex-col items-center">
             <label className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-4">PESO EFFETTIVO KG</label>
-            <input type="text" inputMode="decimal" value={kgInput} autoFocus onChange={(e) => setKgInput(e.target.value)} className="w-full bg-transparent font-black text-8xl text-center text-sky-400 outline-none tabular-nums" placeholder="00.0" />
+            <input 
+              type="text" 
+              inputMode="decimal" 
+              value={kgInput} 
+              autoFocus 
+              onChange={(e) => setKgInput(e.target.value)} 
+              className="w-full bg-transparent font-black text-8xl text-center text-sky-400 outline-none tabular-nums" 
+              placeholder="00.0" 
+            />
           </div>
+
           <div className="grid grid-cols-2 gap-6">
              <div className="bg-white/5 p-6 rounded-[2rem] border border-white/5 text-center">
                 <span className="text-[9px] font-bold text-white/40 uppercase block mb-2">NASTRI</span>
@@ -634,11 +669,43 @@ const TerminaModal: React.FC<any> = ({ lavorazione, onClose, onConfirm }) => {
                 <input type="number" value={pezzi} onChange={e => setPezzi(Number(e.target.value))} className="w-full bg-transparent font-black text-3xl text-center outline-none text-white tabular-nums" />
              </div>
           </div>
-          <div className="bg-sky-500/80 p-10 rounded-[3rem] flex flex-col items-center justify-center gap-1 shadow-2xl">
-            <span className="text-sm font-black text-white/50 uppercase tracking-[0.4em] italic mb-1">SVILUPPO CALCOLATO</span>
-            <span className="text-6xl font-black text-white italic tracking-tighter tabular-nums">{metri} <span className="text-2xl not-italic opacity-40">MT</span></span>
+
+          <div className={`p-10 rounded-[3rem] flex flex-col items-center justify-center gap-1 shadow-2xl transition-colors ${isMetriManual ? 'bg-amber-500/80' : 'bg-sky-500/80'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-black text-white/50 uppercase tracking-[0.4em] italic">
+                {isMetriManual ? 'INSERIMENTO MANUALE' : 'SVILUPPO CALCOLATO'}
+              </span>
+              {!isMetriManual && <Edit3 size={12} className="text-white/30" />}
+            </div>
+            
+            <div className="flex items-baseline gap-2">
+              <input 
+                type="text"
+                inputMode="numeric"
+                value={metriInput}
+                onChange={(e) => {
+                  setIsMetriManual(true);
+                  setMetriInput(e.target.value);
+                }}
+                className="bg-transparent font-black text-6xl text-center text-white outline-none tabular-nums italic tracking-tighter w-48"
+              />
+              <span className="text-2xl font-black text-white not-italic opacity-40">MT</span>
+            </div>
+            
+            {isMetriManual && (
+              <button 
+                onClick={() => setIsMetriManual(false)} 
+                className="mt-4 text-[9px] font-black text-white/60 hover:text-white uppercase tracking-widest border-b border-white/20"
+              >
+                Ripristina Calcolo Auto
+              </button>
+            )}
           </div>
-          <button onClick={() => onConfirm(lavorazione, parseNum(kgInput), metri, nastri, pezzi)} className="w-full bg-white py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 transition-all group border border-white shadow-2xl">
+
+          <button 
+            onClick={() => onConfirm(lavorazione, parseNum(kgInput), parseNum(metriInput), nastri, pezzi)} 
+            className="w-full bg-white py-6 rounded-[2rem] flex items-center justify-center gap-4 active:scale-95 transition-all group border border-white shadow-2xl"
+          >
             <CheckCircle2 size={32} className="text-sky-500" />
             <span className="text-sm font-black text-slate-900 uppercase tracking-[0.4em]">REGISTRA DATI</span>
           </button>
